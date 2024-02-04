@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -62,7 +62,7 @@ class Filesystem(object):
             localFileSize = os.path.getsize(localFile)
         except OSError:
             warnMsg = "file '%s' is missing" % localFile
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
             localFileSize = 0
 
         if fileRead and Backend.isDbms(DBMS.PGSQL):
@@ -95,7 +95,7 @@ class Filesystem(object):
                 warnMsg = "it looks like the file has not been written (usually "
                 warnMsg += "occurs if the DBMS process user has no write "
                 warnMsg += "privileges in the destination path)"
-                logger.warn(warnMsg)
+                logger.warning(warnMsg)
 
         return sameFile
 
@@ -222,13 +222,13 @@ class Filesystem(object):
 
             if conf.direct or isStackingAvailable():
                 if isStackingAvailable():
-                    debugMsg = "going to read the file with stacked query SQL "
+                    debugMsg = "going to try to read the file with stacked query SQL "
                     debugMsg += "injection technique"
                     logger.debug(debugMsg)
 
                 fileContent = self.stackedReadFile(remoteFile)
             elif Backend.isDbms(DBMS.MYSQL):
-                debugMsg = "going to read the file with a non-stacked query "
+                debugMsg = "going to try to read the file with non-stacked query "
                 debugMsg += "SQL injection technique"
                 logger.debug(debugMsg)
 

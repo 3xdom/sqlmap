@@ -1,14 +1,37 @@
+# Version 1.7 (2022-01-02)
+
+* [View changes](https://github.com/sqlmapproject/sqlmap/compare/1.6...1.7)
+* [View issues](https://github.com/sqlmapproject/sqlmap/milestone/8?closed=1)
+
+# Version 1.6 (2022-01-03)
+
+* [View changes](https://github.com/sqlmapproject/sqlmap/compare/1.5...1.6)
+* [View issues](https://github.com/sqlmapproject/sqlmap/milestone/7?closed=1)
+
+# Version 1.5 (2021-01-03)
+
+* [View changes](https://github.com/sqlmapproject/sqlmap/compare/1.4...1.5)
+* [View issues](https://github.com/sqlmapproject/sqlmap/milestone/6?closed=1)
+
+# Version 1.4 (2020-01-01)
+
+* [View changes](https://github.com/sqlmapproject/sqlmap/compare/1.3...1.4)
+* [View issues](https://github.com/sqlmapproject/sqlmap/milestone/5?closed=1)
+
 # Version 1.3 (2019-01-05)
 
 * [View changes](https://github.com/sqlmapproject/sqlmap/compare/1.2...1.3)
+* [View issues](https://github.com/sqlmapproject/sqlmap/milestone/4?closed=1)
 
 # Version 1.2 (2018-01-08)
 
 * [View changes](https://github.com/sqlmapproject/sqlmap/compare/1.1...1.2)
+* [View issues](https://github.com/sqlmapproject/sqlmap/milestone/3?closed=1)
 
 # Version 1.1 (2017-04-07)
 
 * [View changes](https://github.com/sqlmapproject/sqlmap/compare/1.0...1.1)
+* [View issues](https://github.com/sqlmapproject/sqlmap/milestone/2?closed=1)
 
 # Version 1.0 (2016-02-27)
 
@@ -163,7 +186,7 @@
 * Major code cleanup.
 * Added simple file encryption/compression utility, extra/cloak/cloak.py, used by sqlmap to decrypt on the fly Churrasco, UPX executable and web shells consequently reducing drastically the number of anti-virus software that mistakenly mark sqlmap as a malware.
 * Updated user's manual.
-* Created several demo videos, hosted on YouTube (http://www.youtube.com/user/inquisb) and linked from http://sqlmap.org/demo.html.
+* Created several demo videos, hosted on YouTube (http://www.youtube.com/user/inquisb) and linked from https://sqlmap.org/demo.html.
 
 # Version 0.8 release candidate (2009-09-21)
 
@@ -335,7 +358,7 @@
 * Added Microsoft SQL Server extensive DBMS fingerprint checks based upon accurate '@@version' parsing matching on an XML file to get also the exact patching level of the DBMS;
 * Added support for query ETA (Estimated Time of Arrival) real time calculation (`--eta`);
 * Added support to extract database management system users password hash on MySQL and PostgreSQL (`--passwords`);
-* Added docstrings to all functions, classes and methods, consequently released the sqlmap development documentation <http://sqlmap.org/dev/>;
+* Added docstrings to all functions, classes and methods, consequently released the sqlmap development documentation <https://sqlmap.org/dev/>;
 * Implemented Google dorking feature (`-g`) to take advantage of Google results affected by SQL injection to perform other command line argument on their DBMS;
 * Improved logging functionality: passed from banal 'print' to Python native logging library;
 * Added support for more than one parameter in `-p` command line option;

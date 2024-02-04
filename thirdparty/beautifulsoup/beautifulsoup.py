@@ -85,7 +85,6 @@ __copyright__ = "Copyright (c) 2004-2012 Leonard Richardson"
 __license__ = "New-style BSD"
 
 import codecs
-import types
 import re
 import sys
 
@@ -595,7 +594,7 @@ class Tag(PageElement):
         stopNode = self._lastRecursiveChild().next
         strings = []
         current = self.contents[0]
-        while current is not stopNode:
+        while current and current is not stopNode:
             if isinstance(current, NavigableString):
                 strings.append(current.strip())
             current = current.next
@@ -897,7 +896,7 @@ class Tag(PageElement):
             return  # Note: https://stackoverflow.com/a/30217723 (PEP 479)
         stopNode = self._lastRecursiveChild().next
         current = self.contents[0]
-        while current is not stopNode:
+        while current and current is not stopNode:
             yield current
             current = current.next
 
@@ -2029,6 +2028,5 @@ class UnicodeDammit:
 
 #By default, act as an HTML pretty-printer.
 if __name__ == '__main__':
-    import sys
     soup = BeautifulSoup(sys.stdin)
     print(soup.prettify())

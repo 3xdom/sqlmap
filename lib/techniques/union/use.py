@@ -1,14 +1,13 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
-import binascii
+import json
 import re
 import time
-import xml.etree.ElementTree
 
 from lib.core.agent import agent
 from lib.core.bigarray import BigArray
@@ -26,20 +25,18 @@ from lib.core.common import hashDBRetrieve
 from lib.core.common import hashDBWrite
 from lib.core.common import incrementCounter
 from lib.core.common import initTechnique
+from lib.core.common import isDigit
 from lib.core.common import isListLike
 from lib.core.common import isNoneValue
 from lib.core.common import isNumPosStrValue
 from lib.core.common import listToStrValue
 from lib.core.common import parseUnionPage
 from lib.core.common import removeReflectiveValues
-from lib.core.common import safeStringFormat
 from lib.core.common import singleTimeDebugMessage
 from lib.core.common import singleTimeWarnMessage
 from lib.core.common import unArrayizeValue
 from lib.core.common import wasLastResponseDBMSError
 from lib.core.compat import xrange
-from lib.core.convert import decodeBase64
-from lib.core.convert import getBytes
 from lib.core.convert import getUnicode
 from lib.core.convert import htmlUnescape
 from lib.core.data import conf
@@ -74,24 +71,70 @@ def _oneShotUnionUse(expression, unpack=True, limited=False):
     if retVal is None:
         vector = kb.injection.data[PAYLOAD.TECHNIQUE.UNION].vector
 
-        if not kb.rowXmlMode:
+        if not kb.jsonAggMode:
             injExpression = unescaper.escape(agent.concatQuery(expression, unpack))
             kb.unionDuplicates = vector[7]
             kb.forcePartialUnion = vector[8]
+
+            # Note: introduced columns in 1.4.2.42#dev
+            try:
+                kb.tableFrom = vector[9]
+                kb.unionTemplate = vector[10]
+            except IndexError:
+                pass
+
             query = agent.forgeUnionQuery(injExpression, vector[0], vector[1], vector[2], vector[3], vector[4], vector[5], vector[6], None, limited)
             where = PAYLOAD.WHERE.NEGATIVE if conf.limitStart or conf.limitStop else vector[6]
         else:
+            injExpression = unescaper.escape(expression)
             where = vector[6]
-            query = agent.forgeUnionQuery(expression, vector[0], vector[1], vector[2], vector[3], vector[4], vector[5], vector[6], None, False)
+            query = agent.forgeUnionQuery(injExpression, vector[0], vector[1], vector[2], vector[3], vector[4], vector[5], vector[6], None, False)
 
         payload = agent.payload(newValue=query, where=where)
 
         # Perform the request
         page, headers, _ = Request.queryPage(payload, content=True, raise404=False)
 
+        if page and kb.chars.start.upper() in page and kb.chars.start not in page:
+            singleTimeWarnMessage("results seems to be upper-cased by force. sqlmap will automatically lower-case them")
+
+            page = page.lower()
+
         incrementCounter(PAYLOAD.TECHNIQUE.UNION)
 
-        if not kb.rowXmlMode:
+        if kb.jsonAggMode:
+            for _page in (page or "", (page or "").replace('\\"', '"')):
+                if Backend.isDbms(DBMS.MSSQL):
+                    output = extractRegexResult(r"%s(?P<result>.*)%s" % (kb.chars.start, kb.chars.stop), removeReflectiveValues(_page, payload))
+                    if output:
+                        try:
+                            retVal = ""
+                            fields = re.findall(r'"([^"]+)":', extractRegexResult(r"{(?P<result>[^}]+)}", output))
+                            for row in json.loads(output):
+                                retVal += "%s%s%s" % (kb.chars.start, kb.chars.delimiter.join(getUnicode(row[field] or NULL) for field in fields), kb.chars.stop)
+                        except:
+                            retVal = None
+                        else:
+                            retVal = getUnicode(retVal)
+                elif Backend.isDbms(DBMS.PGSQL):
+                    output = extractRegexResult(r"(?P<result>%s.*%s)" % (kb.chars.start, kb.chars.stop), removeReflectiveValues(_page, payload))
+                    if output:
+                        retVal = output
+                else:
+                    output = extractRegexResult(r"%s(?P<result>.*?)%s" % (kb.chars.start, kb.chars.stop), removeReflectiveValues(_page, payload))
+                    if output:
+                        try:
+                            retVal = ""
+                            for row in json.loads(output):
+                                retVal += "%s%s%s" % (kb.chars.start, row, kb.chars.stop)
+                        except:
+                            retVal = None
+                        else:
+                            retVal = getUnicode(retVal)
+
+                if retVal:
+                    break
+        else:
             # Parse the returned page to get the exact UNION-based
             # SQL injection output
             def _(regex):
@@ -107,40 +150,6 @@ def _oneShotUnionUse(expression, unpack=True, limited=False):
                 page = page.replace(kb.chars.stop[:-1], kb.chars.stop)
 
             retVal = _("(?P<result>%s.*%s)" % (kb.chars.start, kb.chars.stop))
-        else:
-            output = extractRegexResult(r"(?P<result>(<row.+?/>)+)", page)
-            if output:
-                try:
-                    root = xml.etree.ElementTree.fromstring(safeStringFormat("<root>%s</root>", getBytes(output)))
-                    retVal = ""
-                    for column in kb.dumpColumns:
-                        base64 = True
-                        for child in root:
-                            value = child.attrib.get(column, "").strip()
-                            if value and not re.match(r"\A[a-zA-Z0-9+/]+={0,2}\Z", value):
-                                base64 = False
-                                break
-
-                            try:
-                                decodeBase64(value)
-                            except (binascii.Error, TypeError):
-                                base64 = False
-                                break
-
-                        if base64:
-                            for child in root:
-                                child.attrib[column] = decodeBase64(child.attrib.get(column, ""), binary=False) or NULL
-
-                    for child in root:
-                        row = []
-                        for column in kb.dumpColumns:
-                            row.append(child.attrib.get(column, NULL))
-                        retVal += "%s%s%s" % (kb.chars.start, kb.chars.delimiter.join(row), kb.chars.stop)
-
-                except:
-                    pass
-                else:
-                    retVal = getUnicode(retVal)
 
         if retVal is not None:
             retVal = getUnicode(retVal, kb.pageEncoding)
@@ -151,14 +160,28 @@ def _oneShotUnionUse(expression, unpack=True, limited=False):
 
             hashDBWrite("%s%s" % (conf.hexConvert or False, expression), retVal)
 
-        elif not kb.rowXmlMode:
+        elif not kb.jsonAggMode:
             trimmed = _("%s(?P<result>.*?)<" % (kb.chars.start))
 
             if trimmed:
                 warnMsg = "possible server trimmed output detected "
                 warnMsg += "(probably due to its length and/or content): "
                 warnMsg += safecharencode(trimmed)
-                logger.warn(warnMsg)
+                logger.warning(warnMsg)
+
+            elif re.search(r"ORDER BY [^ ]+\Z", expression):
+                debugMsg = "retrying failed SQL query without the ORDER BY clause"
+                singleTimeDebugMessage(debugMsg)
+
+                expression = re.sub(r"\s*ORDER BY [^ ]+\Z", "", expression)
+                retVal = _oneShotUnionUse(expression, unpack, limited)
+
+            elif kb.nchar and re.search(r" AS N(CHAR|VARCHAR)", agent.nullAndCastField(expression)):
+                debugMsg = "turning off NATIONAL CHARACTER casting"  # NOTE: in some cases there are "known" incompatibilities between original columns and NCHAR (e.g. http://testphp.vulnweb.com/artists.php?artist=1)
+                singleTimeDebugMessage(debugMsg)
+
+                kb.nchar = False
+                retVal = _oneShotUnionUse(expression, unpack, limited)
     else:
         vector = kb.injection.data[PAYLOAD.TECHNIQUE.UNION].vector
         kb.unionDuplicates = vector[7]
@@ -173,25 +196,25 @@ def configUnion(char=None, columns=None):
         kb.uChar = char
 
         if conf.uChar is not None:
-            kb.uChar = char.replace("[CHAR]", conf.uChar if conf.uChar.isdigit() else "'%s'" % conf.uChar.strip("'"))
+            kb.uChar = char.replace("[CHAR]", conf.uChar if isDigit(conf.uChar) else "'%s'" % conf.uChar.strip("'"))
 
     def _configUnionCols(columns):
         if not isinstance(columns, six.string_types):
             return
 
-        columns = columns.replace(" ", "")
-        if "-" in columns:
-            colsStart, colsStop = columns.split("-")
+        columns = columns.replace(' ', "")
+        if '-' in columns:
+            colsStart, colsStop = columns.split('-')
         else:
             colsStart, colsStop = columns, columns
 
-        if not colsStart.isdigit() or not colsStop.isdigit():
+        if not isDigit(colsStart) or not isDigit(colsStop):
             raise SqlmapSyntaxException("--union-cols must be a range of integers")
 
         conf.uColsStart, conf.uColsStop = int(colsStart), int(colsStop)
 
         if conf.uColsStart > conf.uColsStop:
-            errMsg = "--union-cols range has to be from lower to "
+            errMsg = "--union-cols range has to represent lower to "
             errMsg += "higher number of columns"
             raise SqlmapSyntaxException(errMsg)
 
@@ -222,19 +245,30 @@ def unionUse(expression, unpack=True, dump=False):
     # Set kb.partRun in case the engine is called from the API
     kb.partRun = getPartRun(alias=False) if conf.api else None
 
-    if Backend.isDbms(DBMS.MSSQL) and kb.dumpColumns:
-        kb.rowXmlMode = True
-        _ = "(%s FOR XML RAW, BINARY BASE64)" % expression
-        output = _oneShotUnionUse(_, False)
-        value = parseUnionPage(output)
-        kb.rowXmlMode = False
-
     if expressionFieldsList and len(expressionFieldsList) > 1 and "ORDER BY" in expression.upper():
         # Removed ORDER BY clause because UNION does not play well with it
         expression = re.sub(r"(?i)\s*ORDER BY\s+[\w,]+", "", expression)
         debugMsg = "stripping ORDER BY clause from statement because "
         debugMsg += "it does not play well with UNION query SQL injection"
         singleTimeDebugMessage(debugMsg)
+
+    if Backend.getIdentifiedDbms() in (DBMS.MYSQL, DBMS.ORACLE, DBMS.PGSQL, DBMS.MSSQL, DBMS.SQLITE) and expressionFields and not any((conf.binaryFields, conf.limitStart, conf.limitStop, conf.forcePartial, conf.disableJson)):
+        match = re.search(r"SELECT\s*(.+?)\bFROM", expression, re.I)
+        if match and not (Backend.isDbms(DBMS.ORACLE) and FROM_DUMMY_TABLE[DBMS.ORACLE] in expression) and not re.search(r"\b(MIN|MAX|COUNT)\(", expression):
+            kb.jsonAggMode = True
+            if Backend.isDbms(DBMS.MYSQL):
+                query = expression.replace(expressionFields, "CONCAT('%s',JSON_ARRAYAGG(CONCAT_WS('%s',%s)),'%s')" % (kb.chars.start, kb.chars.delimiter, expressionFields, kb.chars.stop), 1)
+            elif Backend.isDbms(DBMS.ORACLE):
+                query = expression.replace(expressionFields, "'%s'||JSON_ARRAYAGG(%s)||'%s'" % (kb.chars.start, ("||'%s'||" % kb.chars.delimiter).join(expressionFieldsList), kb.chars.stop), 1)
+            elif Backend.isDbms(DBMS.SQLITE):
+                query = expression.replace(expressionFields, "'%s'||JSON_GROUP_ARRAY(%s)||'%s'" % (kb.chars.start, ("||'%s'||" % kb.chars.delimiter).join("COALESCE(%s,' ')" % field for field in expressionFieldsList), kb.chars.stop), 1)
+            elif Backend.isDbms(DBMS.PGSQL):    # Note: ARRAY_AGG does CSV alike output, thus enclosing start/end inside each item
+                query = expression.replace(expressionFields, "ARRAY_AGG('%s'||%s||'%s')::text" % (kb.chars.start, ("||'%s'||" % kb.chars.delimiter).join("COALESCE(%s::text,' ')" % field for field in expressionFieldsList), kb.chars.stop), 1)
+            elif Backend.isDbms(DBMS.MSSQL):
+                query = "'%s'+(%s FOR JSON AUTO, INCLUDE_NULL_VALUES)+'%s'" % (kb.chars.start, expression, kb.chars.stop)
+            output = _oneShotUnionUse(query, False)
+            value = parseUnionPage(output)
+            kb.jsonAggMode = False
 
     # We have to check if the SQL query might return multiple entries
     # if the technique is partial UNION query and in such case forge the
@@ -261,16 +295,16 @@ def unionUse(expression, unpack=True, dump=False):
                 else:
                     stopLimit = int(count)
 
-                    infoMsg = "used SQL query returns "
-                    infoMsg += "%d %s" % (stopLimit, "entries" if stopLimit > 1 else "entry")
-                    logger.info(infoMsg)
+                    debugMsg = "used SQL query returns "
+                    debugMsg += "%d %s" % (stopLimit, "entries" if stopLimit > 1 else "entry")
+                    logger.debug(debugMsg)
 
             elif count and (not isinstance(count, six.string_types) or not count.isdigit()):
                 warnMsg = "it was not possible to count the number "
                 warnMsg += "of entries for the SQL query provided. "
                 warnMsg += "sqlmap will assume that it returns only "
                 warnMsg += "one entry"
-                logger.warn(warnMsg)
+                logger.warning(warnMsg)
 
                 stopLimit = 1
 
@@ -278,7 +312,7 @@ def unionUse(expression, unpack=True, dump=False):
                 if not count:
                     warnMsg = "the SQL query provided does not "
                     warnMsg += "return any output"
-                    logger.warn(warnMsg)
+                    logger.warning(warnMsg)
                 else:
                     value = []  # for empty tables
                 return value
@@ -305,8 +339,8 @@ def unionUse(expression, unpack=True, dump=False):
 
                 if stopLimit > TURN_OFF_RESUME_INFO_LIMIT:
                     kb.suppressResumeInfo = True
-                    debugMsg = "suppressing possible resume console info because of "
-                    debugMsg += "large number of rows. It might take too long"
+                    debugMsg = "suppressing possible resume console info for "
+                    debugMsg += "large number of rows as it might take too long"
                     logger.debug(debugMsg)
 
                 try:
@@ -395,7 +429,7 @@ def unionUse(expression, unpack=True, dump=False):
 
                     warnMsg = "user aborted during enumeration. sqlmap "
                     warnMsg += "will display partial output"
-                    logger.warn(warnMsg)
+                    logger.warning(warnMsg)
 
                 finally:
                     for _ in sorted(threadData.shared.buffered):
@@ -411,7 +445,7 @@ def unionUse(expression, unpack=True, dump=False):
     duration = calculateDeltaSeconds(start)
 
     if not kb.bruteMode:
-        debugMsg = "performed %d queries in %.2f seconds" % (kb.counters[PAYLOAD.TECHNIQUE.UNION], duration)
+        debugMsg = "performed %d quer%s in %.2f seconds" % (kb.counters[PAYLOAD.TECHNIQUE.UNION], 'y' if kb.counters[PAYLOAD.TECHNIQUE.UNION] == 1 else "ies", duration)
         logger.debug(debugMsg)
 
     return value

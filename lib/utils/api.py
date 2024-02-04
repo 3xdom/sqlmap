@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -17,18 +17,22 @@ import socket
 import sqlite3
 import sys
 import tempfile
+import threading
 import time
 
 from lib.core.common import dataToStdout
 from lib.core.common import getSafeExString
 from lib.core.common import openFile
 from lib.core.common import saveConfig
+from lib.core.common import setColor
 from lib.core.common import unArrayizeValue
 from lib.core.compat import xrange
 from lib.core.convert import decodeBase64
 from lib.core.convert import dejsonize
 from lib.core.convert import encodeBase64
 from lib.core.convert import encodeHex
+from lib.core.convert import getBytes
+from lib.core.convert import getText
 from lib.core.convert import jsonize
 from lib.core.data import conf
 from lib.core.data import kb
@@ -47,6 +51,8 @@ from lib.core.settings import IS_WIN
 from lib.core.settings import RESTAPI_DEFAULT_ADAPTER
 from lib.core.settings import RESTAPI_DEFAULT_ADDRESS
 from lib.core.settings import RESTAPI_DEFAULT_PORT
+from lib.core.settings import RESTAPI_UNSUPPORTED_OPTIONS
+from lib.core.settings import VERSION_STRING
 from lib.core.shell import autoCompletion
 from lib.core.subprocessng import Popen
 from lib.parse.cmdline import cmdLineParser
@@ -58,6 +64,7 @@ from thirdparty.bottle.bottle import request
 from thirdparty.bottle.bottle import response
 from thirdparty.bottle.bottle import run
 from thirdparty.bottle.bottle import server_names
+from thirdparty import six
 from thirdparty.six.moves import http_client as _http_client
 from thirdparty.six.moves import input as _input
 from thirdparty.six.moves import urllib as _urllib
@@ -82,6 +89,7 @@ class Database(object):
     def connect(self, who="server"):
         self.connection = sqlite3.connect(self.database, timeout=3, isolation_level=None, check_same_thread=False)
         self.cursor = self.connection.cursor()
+        self.lock = threading.Lock()
         logger.debug("REST-JSON API %s connected to IPC database" % who)
 
     def disconnect(self):
@@ -95,17 +103,20 @@ class Database(object):
         self.connection.commit()
 
     def execute(self, statement, arguments=None):
-        while True:
-            try:
-                if arguments:
-                    self.cursor.execute(statement, arguments)
+        with self.lock:
+            while True:
+                try:
+                    if arguments:
+                        self.cursor.execute(statement, arguments)
+                    else:
+                        self.cursor.execute(statement)
+                except sqlite3.OperationalError as ex:
+                    if "locked" not in getSafeExString(ex):
+                        raise
+                    else:
+                        time.sleep(1)
                 else:
-                    self.cursor.execute(statement)
-            except sqlite3.OperationalError as ex:
-                if "locked" not in getSafeExString(ex):
-                    raise
-            else:
-                break
+                    break
 
         if statement.lstrip().upper().startswith("SELECT"):
             return self.cursor.fetchall()
@@ -459,7 +470,7 @@ def option_get(taskid):
             logger.debug("(%s) Requested value for unknown option '%s'" % (taskid, option))
             return jsonize({"success": False, "message": "Unknown option '%s'" % option})
 
-    logger.debug("(%s) Retrieved values for option(s) '%s'" % (taskid, ",".join(options)))
+    logger.debug("(%s) Retrieved values for option(s) '%s'" % (taskid, ','.join(options)))
 
     return jsonize({"success": True, "options": results})
 
@@ -497,6 +508,11 @@ def scan_start(taskid):
     if request.json is None:
         logger.warning("[%s] Invalid JSON options provided to scan_start()" % taskid)
         return jsonize({"success": False, "message": "Invalid JSON options"})
+
+    for key in request.json:
+        if key in RESTAPI_UNSUPPORTED_OPTIONS:
+            logger.warning("[%s] Unsupported option '%s' provided to scan_start()" % (taskid, key))
+            return jsonize({"success": False, "message": "Unsupported option '%s'" % key})
 
     # Initialize sqlmap engine's options with user's provided options, if any
     for option, value in request.json.items():
@@ -597,7 +613,7 @@ def scan_log_limited(taskid, start, end):
         logger.warning("[%s] Invalid task ID provided to scan_log_limited()" % taskid)
         return jsonize({"success": False, "message": "Invalid task ID"})
 
-    if not start.isdigit() or not end.isdigit() or end < start:
+    if not start.isdigit() or not end.isdigit() or int(end) < int(start):
         logger.warning("[%s] Invalid start or end value provided to scan_log_limited()" % taskid)
         return jsonize({"success": False, "message": "Invalid start or end value, must be digits"})
 
@@ -655,6 +671,15 @@ def download(taskid, target, filename):
         logger.warning("[%s] File does not exist %s" % (taskid, target))
         return jsonize({"success": False, "message": "File does not exist"})
 
+@get("/version")
+def version(token=None):
+    """
+    Fetch server version
+    """
+
+    logger.debug("Fetched version (%s)" % ("admin" if is_admin(token) else request.remote_addr))
+    return jsonize({"success": True, "version": VERSION_STRING.split('/')[-1]})
+
 def server(host=RESTAPI_DEFAULT_ADDRESS, port=RESTAPI_DEFAULT_PORT, adapter=RESTAPI_DEFAULT_ADAPTER, username=None, password=None):
     """
     REST-JSON API server
@@ -705,23 +730,25 @@ def server(host=RESTAPI_DEFAULT_ADDRESS, port=RESTAPI_DEFAULT_PORT, adapter=REST
             errMsg += "List of supported adapters: %s" % ', '.join(sorted(list(server_names.keys())))
         else:
             errMsg = "Server support for adapter '%s' is not installed on this system " % adapter
-            errMsg += "(Note: you can try to install it with 'sudo apt-get install python-%s' or 'sudo pip install %s')" % (adapter, adapter)
+            errMsg += "(Note: you can try to install it with 'apt install python-%s' or 'pip%s install %s')" % (adapter, '3' if six.PY3 else "", adapter)
         logger.critical(errMsg)
 
 def _client(url, options=None):
     logger.debug("Calling '%s'" % url)
     try:
-        data = None
-        if options is not None:
-            data = jsonize(options)
         headers = {"Content-Type": "application/json"}
+
+        if options is not None:
+            data = getBytes(jsonize(options))
+        else:
+            data = None
 
         if DataStore.username or DataStore.password:
             headers["Authorization"] = "Basic %s" % encodeBase64("%s:%s" % (DataStore.username or "", DataStore.password or ""), binary=False)
 
         req = _urllib.request.Request(url, data, headers)
         response = _urllib.request.urlopen(req)
-        text = response.read()
+        text = getText(response.read())
     except:
         if options:
             logger.error("Failed to load and parse %s" % url)
@@ -752,11 +779,12 @@ def client(host=RESTAPI_DEFAULT_ADDRESS, port=RESTAPI_DEFAULT_PORT, username=Non
         if not isinstance(ex, _urllib.error.HTTPError) or ex.code == _http_client.UNAUTHORIZED:
             errMsg = "There has been a problem while connecting to the "
             errMsg += "REST-JSON API server at '%s' " % addr
-            errMsg += "(%s)" % ex
+            errMsg += "(%s)" % getSafeExString(ex)
             logger.critical(errMsg)
             return
 
-    commands = ("help", "new", "use", "data", "log", "status", "option", "stop", "kill", "list", "flush", "exit", "bye", "quit")
+    commands = ("help", "new", "use", "data", "log", "status", "option", "stop", "kill", "list", "flush", "version", "exit", "bye", "quit")
+    colors =  ('red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'lightgrey', 'lightred', 'lightgreen', 'lightyellow', 'lightblue', 'lightmagenta', 'lightcyan')
     autoCompletion(AUTOCOMPLETE_TYPE.API, commands=commands)
 
     taskid = None
@@ -764,7 +792,8 @@ def client(host=RESTAPI_DEFAULT_ADDRESS, port=RESTAPI_DEFAULT_PORT, username=Non
 
     while True:
         try:
-            command = _input("api%s> " % (" (%s)" % taskid if taskid else "")).strip()
+            color = colors[int(taskid or "0", 16) % len(colors)]
+            command = _input("api%s> " % (" (%s)" % setColor(taskid, color) if taskid else "")).strip()
             command = re.sub(r"\A(\w+)", lambda match: match.group(1).lower(), command)
         except (EOFError, KeyboardInterrupt):
             print()
@@ -804,7 +833,7 @@ def client(host=RESTAPI_DEFAULT_ADDRESS, port=RESTAPI_DEFAULT_PORT, username=Non
             try:
                 argv = ["sqlmap.py"] + shlex.split(command)[1:]
             except Exception as ex:
-                logger.error("Error occurred while parsing arguments ('%s')" % ex)
+                logger.error("Error occurred while parsing arguments ('%s')" % getSafeExString(ex))
                 taskid = None
                 continue
 
@@ -821,7 +850,7 @@ def client(host=RESTAPI_DEFAULT_ADDRESS, port=RESTAPI_DEFAULT_PORT, username=Non
             raw = _client("%s/task/new" % addr)
             res = dejsonize(raw)
             if not res["success"]:
-                logger.error("Failed to create new task")
+                logger.error("Failed to create new task ('%s')" % res.get("message", ""))
                 continue
             taskid = res["taskid"]
             logger.info("New task ID is '%s'" % taskid)
@@ -829,7 +858,7 @@ def client(host=RESTAPI_DEFAULT_ADDRESS, port=RESTAPI_DEFAULT_PORT, username=Non
             raw = _client("%s/scan/%s/start" % (addr, taskid), cmdLineOptions)
             res = dejsonize(raw)
             if not res["success"]:
-                logger.error("Failed to start scan")
+                logger.error("Failed to start scan ('%s')" % res.get("message", ""))
                 continue
             logger.info("Scanning started")
 
@@ -844,6 +873,13 @@ def client(host=RESTAPI_DEFAULT_ADDRESS, port=RESTAPI_DEFAULT_PORT, username=Non
                 taskid = None
                 continue
             logger.info("Switching to task ID '%s' " % taskid)
+
+        elif command in ("version",):
+            raw = _client("%s/%s" % (addr, command))
+            res = dejsonize(raw)
+            if not res["success"]:
+                logger.error("Failed to execute command %s" % command)
+            dataToStdout("%s\n" % raw)
 
         elif command in ("list", "flush"):
             raw = _client("%s/admin/%s" % (addr, command))
@@ -869,6 +905,7 @@ def client(host=RESTAPI_DEFAULT_ADDRESS, port=RESTAPI_DEFAULT_PORT, username=Non
             msg += "stop           Stop current task\n"
             msg += "kill           Kill current task\n"
             msg += "list           Display all tasks\n"
+            msg += "version        Fetch server version\n"
             msg += "flush          Flush tasks (delete all tasks)\n"
             msg += "exit           Exit this client\n"
 

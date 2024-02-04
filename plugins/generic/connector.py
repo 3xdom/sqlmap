@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -63,20 +63,20 @@ class Connector(object):
 
     def connect(self):
         errMsg = "'connect' method must be defined "
-        errMsg += "into the specific DBMS plugin"
+        errMsg += "inside the specific DBMS plugin"
         raise SqlmapUndefinedMethod(errMsg)
 
     def fetchall(self):
         errMsg = "'fetchall' method must be defined "
-        errMsg += "into the specific DBMS plugin"
+        errMsg += "inside the specific DBMS plugin"
         raise SqlmapUndefinedMethod(errMsg)
 
     def execute(self, query):
         errMsg = "'execute' method must be defined "
-        errMsg += "into the specific DBMS plugin"
+        errMsg += "inside the specific DBMS plugin"
         raise SqlmapUndefinedMethod(errMsg)
 
     def select(self, query):
         errMsg = "'select' method must be defined "
-        errMsg += "into the specific DBMS plugin"
+        errMsg += "inside the specific DBMS plugin"
         raise SqlmapUndefinedMethod(errMsg)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -11,9 +11,12 @@ from lib.core.common import Backend
 from lib.core.common import checkFile
 from lib.core.common import decloakToTemp
 from lib.core.common import flattenValue
+from lib.core.common import filterNone
 from lib.core.common import isListLike
+from lib.core.common import isNoneValue
 from lib.core.common import isStackingAvailable
 from lib.core.common import randomStr
+from lib.core.compat import LooseVersion
 from lib.core.data import kb
 from lib.core.data import logger
 from lib.core.data import paths
@@ -48,9 +51,12 @@ class Takeover(GenericTakeover):
 
         banVer = kb.bannerFp["dbmsVersion"]
 
-        if banVer >= "10":
+        if not banVer or not banVer[0].isdigit():
+            errMsg = "unsupported feature on unknown version of PostgreSQL"
+            raise SqlmapUnsupportedFeatureException(errMsg)
+        elif LooseVersion(banVer) >= LooseVersion("10"):
             majorVer = banVer.split('.')[0]
-        elif banVer >= "8.2" and '.' in banVer:
+        elif LooseVersion(banVer) >= LooseVersion("8.2") and '.' in banVer:
             majorVer = '.'.join(banVer.split('.')[:2])
         else:
             errMsg = "unsupported feature on versions of PostgreSQL before 8.2"
@@ -105,7 +111,11 @@ class Takeover(GenericTakeover):
             output = inject.getValue(query, resumeValue=False)
 
             if isListLike(output):
-                output = os.linesep.join(flattenValue(output))
+                output = flattenValue(output)
+                output = filterNone(output)
+
+                if not isNoneValue(output):
+                    output = os.linesep.join(output)
 
             self._cleanupCmd = "DROP TABLE %s" % self.cmdTblName
             inject.goStacked(self._cleanupCmd)

@@ -1,4 +1,4 @@
-# Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+# Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 # See the file 'LICENSE' for copying permission
 
 id
@@ -474,6 +474,7 @@ module_addr
 flag
 
 # spanish
+
 usuario
 nombre
 contrasena
@@ -484,8 +485,11 @@ llave
 chaveta
 tono
 cuna
+correo
+contrasenia
 
 # german
+
 benutzername
 benutzer
 passwort
@@ -499,6 +503,7 @@ stichwort
 schlusselwort
 
 # french
+
 utilisateur
 usager
 consommateur
@@ -510,6 +515,7 @@ touche
 clef
 
 # italian
+
 utente
 nome
 utilizzatore
@@ -521,17 +527,33 @@ chiavetta
 cifrario
 
 # portuguese
+
 usufrutuario
 chave
 cavilha
 
 # slavic
+
 korisnik
 sifra
 lozinka
 kljuc
 
 # turkish
+
+isim
+ad
+adi
+soyisim
+soyad
+soyadi
+kimlik
+kimlikno
+tckimlikno
+tckimlik
+yonetici
+sil
+silinmis
 numara
 sira
 lokasyon
@@ -547,7 +569,9 @@ ev_adres
 is_adresi
 ev_adresi
 isadresi
+isadres
 evadresi
+evadres
 il
 ilce
 eposta
@@ -605,6 +629,7 @@ kontak
 kontaklar
 
 # List from schemafuzz.py (http://www.beenuarora.com/code/schemafuzz.py)
+
 user
 pass
 cc_number
@@ -775,7 +800,9 @@ news
 nick
 number
 nummer
+passhash
 pass_hash
+password_hash
 passwordsalt
 personal_key
 phone
@@ -828,6 +855,7 @@ xar_name
 xar_pass
 
 # List from http://nibblesec.org/files/MSAccessSQLi/MSAccessSQLi.html
+
 account
 accnts
 accnt
@@ -897,6 +925,7 @@ user_pwd
 user_passwd
 
 # List from hyrax (http://sla.ckers.org/forum/read.php?16,36047)
+
 fld_id
 fld_username
 fld_password
@@ -1049,6 +1078,7 @@ yhmm
 yonghu
 
 # site:br
+
 content_id
 codigo
 geometry
@@ -1305,6 +1335,7 @@ newssummaryauthor
 and_xevento
 
 # site:de
+
 rolle_nr
 standort_nr
 ja
@@ -1467,6 +1498,7 @@ summary_id
 gameid
 
 # site:es
+
 catid
 dni
 prune_id
@@ -1556,6 +1588,7 @@ time_stamp
 bannerid
 
 # site:fr
+
 numero
 id_auteur
 titre
@@ -1607,6 +1640,7 @@ n_dir
 age
 
 # site:ru
+
 dt_id
 subdivision_id
 sub_class_id
@@ -1810,8 +1844,13 @@ banner_id
 error
 language_id
 val
+parol
+familiya
+imya
+otchestvo
 
 # site:jp
+
 dealer_id
 modify_date
 regist_date
@@ -1943,6 +1982,7 @@ c_commu_topic_id
 c_diary_comment_log_id
 
 # site:it
+
 idcomune
 idruolo
 idtrattamento
@@ -2446,6 +2486,7 @@ client_img
 does_repeat
 
 # site:cn
+
 typeid
 cronid
 advid
@@ -2621,6 +2662,7 @@ disablepostctrl
 fieldname
 
 # site:id
+
 ajar
 akses
 aktif
@@ -2636,6 +2678,7 @@ jeda
 jenis
 jml
 judul
+jumlah
 kata_kunci
 kata_sandi
 katakunci
@@ -2648,6 +2691,7 @@ kunci
 lahir
 nama
 nama_akun
+nama_ibu_kandung
 nama_pengguna
 namaakun
 namapengguna
@@ -2657,6 +2701,7 @@ pengguna
 penjelasan
 perusahaan
 ponsel
+profesi
 ruang
 sandi
 soal
@@ -2664,6 +2709,7 @@ surat_elektronik
 surel
 tanggal
 tanggal_lahir
+telepon
 tempat
 tempat_lahir
 tmp_lahir
@@ -2672,9 +2718,52 @@ urut
 waktu
 
 # WebGoat
+
 cookie
 login_count
+
+# https://sqlwiki.netspi.com/attackQueries/dataTargeting/
+
+credit
+card
+pin
+cvv
+pan
+password
+social
+ssn
+account
+confidential
+
+# site:nl
+
+naam
+straat
+gemeente
+beschrijving
+id_gebruiker
+gebruiker_id
+gebruikersnaam
+wachtwoord
+telefoon
+voornaam
+achternaam
+geslacht
+huisnummer
+gemeente
+leeftijd
+
+# site:cn
+
+yonghuming
+mima
+xingming
+xingbie
+touxiang
+youxiang
+shouji
 
 # Misc
 
 u_pass
+hashedPw

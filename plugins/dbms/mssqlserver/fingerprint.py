@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -89,18 +89,22 @@ class Fingerprint(GenericFingerprint):
             logger.info(infoMsg)
 
             for version, check in (
-                ("2000", "HOST_NAME()=HOST_NAME()"),
-                ("2005", "XACT_STATE()=XACT_STATE()"),
-                ("2008", "SYSDATETIME()=SYSDATETIME()"),
-                ("2012", "CONCAT(NULL,NULL)=CONCAT(NULL,NULL)"),
-                ("2014", "CHARINDEX('12.0.2000',@@version)>0"),
+                ("2022", "CHARINDEX('16.0.',@@VERSION)>0"),
+                ("2019", "CHARINDEX('15.0.',@@VERSION)>0"),
+                ("Azure", "@@VERSION LIKE '%Azure%'"),
+                ("2017", "TRIM(NULL) IS NULL"),
                 ("2016", "ISJSON(NULL) IS NULL"),
-                ("2017", "TRIM(NULL) IS NULL")
+                ("2014", "CHARINDEX('12.0.',@@VERSION)>0"),
+                ("2012", "CONCAT(NULL,NULL)=CONCAT(NULL,NULL)"),
+                ("2008", "SYSDATETIME()=SYSDATETIME()"),
+                ("2005", "XACT_STATE()=XACT_STATE()"),
+                ("2000", "HOST_NAME()=HOST_NAME()"),
             ):
                 result = inject.checkBooleanExpression(check)
 
                 if result:
                     Backend.setVersion(version)
+                    break
 
             if Backend.getVersion():
                 setDbms("%s %s" % (DBMS.MSSQL, Backend.getVersion()))
@@ -114,7 +118,7 @@ class Fingerprint(GenericFingerprint):
             return True
         else:
             warnMsg = "the back-end DBMS is not %s" % DBMS.MSSQL
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
 
             return False
 
@@ -147,7 +151,8 @@ class Fingerprint(GenericFingerprint):
             "Vista or 2008": ("6.0", (2, 1)),
             "7 or 2008 R2": ("6.1", (1, 0)),
             "8 or 2012": ("6.2", (0,)),
-            "8.1 or 2012 R2": ("6.3", (0,))
+            "8.1 or 2012 R2": ("6.3", (0,)),
+            "10 or 11 or 2016 or 2019 or 2022": ("10.0", (0,))
         }
 
         # Get back-end DBMS underlying operating system version
@@ -168,7 +173,7 @@ class Fingerprint(GenericFingerprint):
             warnMsg = "unable to fingerprint the underlying operating "
             warnMsg += "system version, assuming it is Windows "
             warnMsg += "%s Service Pack %d" % (Backend.getOsVersion(), Backend.getOsServicePack())
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
 
             self.cleanup(onlyFileTbl=True)
 

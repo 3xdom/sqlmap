@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -43,10 +43,12 @@ from lib.core.exception import SqlmapCompressionException
 from lib.core.settings import BLOCKED_IP_REGEX
 from lib.core.settings import DEFAULT_COOKIE_DELIMITER
 from lib.core.settings import EVENTVALIDATION_REGEX
+from lib.core.settings import HEURISTIC_PAGE_SIZE_THRESHOLD
 from lib.core.settings import IDENTYWAF_PARSE_LIMIT
 from lib.core.settings import MAX_CONNECTION_TOTAL_SIZE
 from lib.core.settings import META_CHARSET_REGEX
 from lib.core.settings import PARSE_HEADERS_LIMIT
+from lib.core.settings import PRINTABLE_BYTES
 from lib.core.settings import SELECT_FROM_TABLE_REGEX
 from lib.core.settings import UNICODE_ENCODING
 from lib.core.settings import VIEWSTATE_REGEX
@@ -106,7 +108,7 @@ def forgeHeaders(items=None, base=None):
     if conf.cj:
         if HTTP_HEADER.COOKIE in headers:
             for cookie in conf.cj:
-                if cookie.domain_specified and not (conf.hostname or "").endswith(cookie.domain):
+                if cookie is None or cookie.domain_specified and not (conf.hostname or "").endswith(cookie.domain):
                     continue
 
                 if ("%s=" % getUnicode(cookie.name)) in getUnicode(headers[HTTP_HEADER.COOKIE]):
@@ -258,7 +260,7 @@ def getHeuristicCharEncoding(page):
     """
 
     key = hash(page)
-    retVal = kb.cache.encoding.get(key) or detect(page)["encoding"]
+    retVal = kb.cache.encoding[key] if key in kb.cache.encoding else detect(page[:HEURISTIC_PAGE_SIZE_THRESHOLD])["encoding"]
     kb.cache.encoding[key] = retVal
 
     if retVal and retVal.lower().replace('-', "") == UNICODE_ENCODING.lower().replace('-', ""):
@@ -273,6 +275,8 @@ def decodePage(page, contentEncoding, contentType, percentDecode=True):
 
     >>> getText(decodePage(b"<html>foo&amp;bar</html>", None, "text/html; charset=utf-8"))
     '<html>foo&bar</html>'
+    >>> getText(decodePage(b"&#x9;", None, "text/html; charset=utf-8"))
+    '\\t'
     """
 
     if not page or (conf.nullConnection and len(page) < 2):
@@ -303,7 +307,7 @@ def decodePage(page, contentEncoding, contentType, percentDecode=True):
 
             page = data.read()
         except Exception as ex:
-            if "<html" not in page:  # in some cases, invalid "Content-Encoding" appears for plain HTML (should be ignored)
+            if b"<html" not in page:  # in some cases, invalid "Content-Encoding" appears for plain HTML (should be ignored)
                 errMsg = "detected invalid data for declared content "
                 errMsg += "encoding '%s' ('%s')" % (contentEncoding, getSafeExString(ex))
                 singleTimeLogMessage(errMsg, logging.ERROR)
@@ -323,7 +327,7 @@ def decodePage(page, contentEncoding, contentType, percentDecode=True):
 
         metaCharset = checkCharEncoding(extractRegexResult(META_CHARSET_REGEX, page))
 
-        if (any((httpCharset, metaCharset)) and not all((httpCharset, metaCharset))) or (httpCharset == metaCharset and all((httpCharset, metaCharset))):
+        if (any((httpCharset, metaCharset)) and (not all((httpCharset, metaCharset)) or isinstance(page, six.binary_type) and all(_ in PRINTABLE_BYTES for _ in page))) or (httpCharset == metaCharset and all((httpCharset, metaCharset))):
             kb.pageEncoding = httpCharset or metaCharset  # Reference: http://bytes.com/topic/html-css/answers/154758-http-equiv-vs-true-header-has-precedence
             debugMsg = "declared web page charset '%s'" % kb.pageEncoding
             singleTimeLogMessage(debugMsg, logging.DEBUG, debugMsg)
@@ -334,41 +338,45 @@ def decodePage(page, contentEncoding, contentType, percentDecode=True):
 
     # can't do for all responses because we need to support binary files too
     if isinstance(page, six.binary_type) and "text/" in contentType:
-        # e.g. &#x9;&#195;&#235;&#224;&#226;&#224;
-        if b"&#" in page:
-            page = re.sub(b"&#x([0-9a-f]{1,2});", lambda _: decodeHex(_.group(1) if len(_.group(1)) == 2 else "0%s" % _.group(1)), page)
-            page = re.sub(b"&#(\\d{1,3});", lambda _: six.int2byte(int(_.group(1))) if int(_.group(1)) < 256 else _.group(0), page)
+        if not kb.disableHtmlDecoding:
+            # e.g. &#x9;&#195;&#235;&#224;&#226;&#224;
+            if b"&#" in page:
+                page = re.sub(b"&#x([0-9a-f]{1,2});", lambda _: decodeHex(_.group(1) if len(_.group(1)) == 2 else b"0%s" % _.group(1)), page)
+                page = re.sub(b"&#(\\d{1,3});", lambda _: six.int2byte(int(_.group(1))) if int(_.group(1)) < 256 else _.group(0), page)
 
-        # e.g. %20%28%29
-        if percentDecode:
-            if b"%" in page:
-                page = re.sub(b"%([0-9a-fA-F]{2})", lambda _: decodeHex(_.group(1)), page)
+            # e.g. %20%28%29
+            if percentDecode:
+                if b"%" in page:
+                    page = re.sub(b"%([0-9a-f]{2})", lambda _: decodeHex(_.group(1)), page)
+                    page = re.sub(b"%([0-9A-F]{2})", lambda _: decodeHex(_.group(1)), page)     # Note: %DeepSee_SQL in CACHE
 
-        # e.g. &amp;
-        page = re.sub(b"&([^;]+);", lambda _: six.int2byte(HTML_ENTITIES[getText(_.group(1))]) if HTML_ENTITIES.get(getText(_.group(1)), 256) < 256 else _.group(0), page)
+            # e.g. &amp;
+            page = re.sub(b"&([^;]+);", lambda _: six.int2byte(HTML_ENTITIES[getText(_.group(1))]) if HTML_ENTITIES.get(getText(_.group(1)), 256) < 256 else _.group(0), page)
 
-        kb.pageEncoding = kb.pageEncoding or checkCharEncoding(getHeuristicCharEncoding(page))
+            kb.pageEncoding = kb.pageEncoding or checkCharEncoding(getHeuristicCharEncoding(page))
 
-        if (kb.pageEncoding or "").lower() == "utf-8-sig":
-            kb.pageEncoding = "utf-8"
-            if page and page.startswith("\xef\xbb\xbf"):  # Reference: https://docs.python.org/2/library/codecs.html (Note: noticed problems when "utf-8-sig" is left to Python for handling)
-                page = page[3:]
+            if (kb.pageEncoding or "").lower() == "utf-8-sig":
+                kb.pageEncoding = "utf-8"
+                if page and page.startswith(b"\xef\xbb\xbf"):  # Reference: https://docs.python.org/2/library/codecs.html (Note: noticed problems when "utf-8-sig" is left to Python for handling)
+                    page = page[3:]
 
-        page = getUnicode(page, kb.pageEncoding)
+            page = getUnicode(page, kb.pageEncoding)
 
-        # e.g. &#8217;&#8230;&#8482;
-        if "&#" in page:
-            def _(match):
-                retVal = match.group(0)
-                try:
-                    retVal = _unichr(int(match.group(1)))
-                except (ValueError, OverflowError):
-                    pass
-                return retVal
-            page = re.sub(r"&#(\d+);", _, page)
+            # e.g. &#8217;&#8230;&#8482;
+            if "&#" in page:
+                def _(match):
+                    retVal = match.group(0)
+                    try:
+                        retVal = _unichr(int(match.group(1)))
+                    except (ValueError, OverflowError):
+                        pass
+                    return retVal
+                page = re.sub(r"&#(\d+);", _, page)
 
-        # e.g. &zeta;
-        page = re.sub(r"&([^;]+);", lambda _: _unichr(HTML_ENTITIES[_.group(1)]) if HTML_ENTITIES.get(_.group(1), 0) > 255 else _.group(0), page)
+            # e.g. &zeta;
+            page = re.sub(r"&([^;]+);", lambda _: _unichr(HTML_ENTITIES[_.group(1)]) if HTML_ENTITIES.get(_.group(1), 0) > 255 else _.group(0), page)
+        else:
+            page = getUnicode(page, kb.pageEncoding)
 
     return page
 
@@ -390,16 +398,17 @@ def processResponse(page, responseHeaders, code=None, status=None):
         if msg:
             logger.warning("parsed DBMS error message: '%s'" % msg.rstrip('.'))
 
-    if kb.processResponseCounter < IDENTYWAF_PARSE_LIMIT:
-        rawResponse = "%s %s %s\n%s\n%s" % (_http_client.HTTPConnection._http_vsn_str, code or "", status or "", getUnicode("".join(responseHeaders.headers if responseHeaders else [])), page)
+    if not conf.skipWaf and kb.processResponseCounter < IDENTYWAF_PARSE_LIMIT:
+        rawResponse = "%s %s %s\n%s\n%s" % (_http_client.HTTPConnection._http_vsn_str, code or "", status or "", "".join(getUnicode(responseHeaders.headers if responseHeaders else [])), page[:HEURISTIC_PAGE_SIZE_THRESHOLD])
 
-        identYwaf.non_blind.clear()
-        if identYwaf.non_blind_check(rawResponse, silent=True):
-            for waf in identYwaf.non_blind:
-                if waf not in kb.identifiedWafs:
-                    kb.identifiedWafs.add(waf)
-                    errMsg = "WAF/IPS identified as '%s'" % identYwaf.format_name(waf)
-                    singleTimeLogMessage(errMsg, logging.CRITICAL)
+        with kb.locks.identYwaf:
+            identYwaf.non_blind.clear()
+            if identYwaf.non_blind_check(rawResponse, silent=True):
+                for waf in set(identYwaf.non_blind):
+                    if waf not in kb.identifiedWafs:
+                        kb.identifiedWafs.add(waf)
+                        errMsg = "WAF/IPS identified as '%s'" % identYwaf.format_name(waf)
+                        singleTimeLogMessage(errMsg, logging.CRITICAL)
 
     if kb.originalPage is None:
         for regex in (EVENTVALIDATION_REGEX, VIEWSTATE_REGEX):
@@ -429,11 +438,16 @@ def processResponse(page, responseHeaders, code=None, status=None):
         for match in re.finditer(r"(?si)<form.+?</form>", page):
             if re.search(r"(?i)captcha", match.group(0)):
                 kb.captchaDetected = True
-                warnMsg = "potential CAPTCHA protection mechanism detected"
-                if re.search(r"(?i)<title>[^<]*CloudFlare", page):
-                    warnMsg += " (CloudFlare)"
-                singleTimeWarnMessage(warnMsg)
                 break
+
+        if re.search(r"<meta[^>]+\brefresh\b[^>]+\bcaptcha\b", page):
+            kb.captchaDetected = True
+
+        if kb.captchaDetected:
+            warnMsg = "potential CAPTCHA protection mechanism detected"
+            if re.search(r"(?i)<title>[^<]*CloudFlare", page):
+                warnMsg += " (CloudFlare)"
+            singleTimeWarnMessage(warnMsg)
 
     if re.search(BLOCKED_IP_REGEX, page):
         warnMsg = "it appears that you have been blocked by the target server"

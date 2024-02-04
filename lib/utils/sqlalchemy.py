@@ -1,31 +1,35 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
-import imp
+import importlib
 import logging
 import os
+import re
 import sys
 import traceback
 import warnings
 
+_path = list(sys.path)
 _sqlalchemy = None
 try:
-    f, pathname, desc = imp.find_module("sqlalchemy", sys.path[1:])
-    _ = imp.load_module("sqlalchemy", f, pathname, desc)
-    if hasattr(_, "dialects"):
-        _sqlalchemy = _
+    sys.path = sys.path[1:]
+    module = importlib.import_module("sqlalchemy")
+    if hasattr(module, "dialects"):
+        _sqlalchemy = module
         warnings.simplefilter(action="ignore", category=_sqlalchemy.exc.SAWarning)
-except ImportError:
+except:
     pass
+finally:
+    sys.path = _path
 
 try:
     import MySQLdb  # used by SQLAlchemy in case of MySQL
     warnings.filterwarnings("error", category=MySQLdb.Warning)
-except ImportError:
+except (ImportError, AttributeError):
     pass
 
 from lib.core.data import conf
@@ -34,6 +38,8 @@ from lib.core.exception import SqlmapConnectionException
 from lib.core.exception import SqlmapFilePathException
 from lib.core.exception import SqlmapMissingDependence
 from plugins.generic.connector import Connector as GenericConnector
+from thirdparty import six
+from thirdparty.six.moves import urllib as _urllib
 
 def getSafeExString(ex, encoding=None):  # Cross-referenced function
     raise NotImplementedError
@@ -41,7 +47,20 @@ def getSafeExString(ex, encoding=None):  # Cross-referenced function
 class SQLAlchemy(GenericConnector):
     def __init__(self, dialect=None):
         GenericConnector.__init__(self)
+
         self.dialect = dialect
+        self.address = conf.direct
+
+        if conf.dbmsUser:
+            self.address = self.address.replace("'%s':" % conf.dbmsUser, "%s:" % _urllib.parse.quote(conf.dbmsUser))
+            self.address = self.address.replace("%s:" % conf.dbmsUser, "%s:" % _urllib.parse.quote(conf.dbmsUser))
+
+        if conf.dbmsPass:
+            self.address = self.address.replace(":'%s'@" % conf.dbmsPass, ":%s@" % _urllib.parse.quote(conf.dbmsPass))
+            self.address = self.address.replace(":%s@" % conf.dbmsPass, ":%s@" % _urllib.parse.quote(conf.dbmsPass))
+
+        if self.dialect:
+            self.address = re.sub(r"\A.+://", "%s://" % self.dialect, self.address)
 
     def connect(self):
         if _sqlalchemy:
@@ -52,18 +71,15 @@ class SQLAlchemy(GenericConnector):
                     if not os.path.exists(self.db):
                         raise SqlmapFilePathException("the provided database file '%s' does not exist" % self.db)
 
-                    _ = conf.direct.split("//", 1)
-                    conf.direct = "%s////%s" % (_[0], os.path.abspath(self.db))
-
-                if self.dialect:
-                    conf.direct = conf.direct.replace(conf.dbms, self.dialect, 1)
+                    _ = self.address.split("//", 1)
+                    self.address = "%s////%s" % (_[0], os.path.abspath(self.db))
 
                 if self.dialect == "sqlite":
-                    engine = _sqlalchemy.create_engine(conf.direct, connect_args={"check_same_thread": False})
+                    engine = _sqlalchemy.create_engine(self.address, connect_args={"check_same_thread": False})
                 elif self.dialect == "oracle":
-                    engine = _sqlalchemy.create_engine(conf.direct)
+                    engine = _sqlalchemy.create_engine(self.address)
                 else:
-                    engine = _sqlalchemy.create_engine(conf.direct, connect_args={})
+                    engine = _sqlalchemy.create_engine(self.address, connect_args={})
 
                 self.connector = engine.connect()
             except (TypeError, ValueError):
@@ -85,7 +101,7 @@ class SQLAlchemy(GenericConnector):
 
             self.printConnected()
         else:
-            raise SqlmapMissingDependence("SQLAlchemy not available")
+            raise SqlmapMissingDependence("SQLAlchemy not available (e.g. 'pip%s install SQLAlchemy')" % ('3' if six.PY3 else ""))
 
     def fetchall(self):
         try:
@@ -98,13 +114,22 @@ class SQLAlchemy(GenericConnector):
             return None
 
     def execute(self, query):
+        retVal = False
+
         try:
             self.cursor = self.connector.execute(query)
+            retVal = True
         except (_sqlalchemy.exc.OperationalError, _sqlalchemy.exc.ProgrammingError) as ex:
             logger.log(logging.WARN if conf.dbmsHandler else logging.DEBUG, "(remote) %s" % getSafeExString(ex))
         except _sqlalchemy.exc.InternalError as ex:
             raise SqlmapConnectionException(getSafeExString(ex))
 
+        return retVal
+
     def select(self, query):
-        self.execute(query)
-        return self.fetchall()
+        retVal = None
+
+        if self.execute(query):
+            retVal = self.fetchall()
+
+        return retVal

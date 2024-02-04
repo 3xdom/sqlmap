@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -27,6 +27,7 @@ optDict = {
         "paramDel": "string",
         "cookie": "string",
         "cookieDel": "string",
+        "liveCookies": "string",
         "loadCookies": "string",
         "dropSetCookie": "boolean",
         "agent": "string",
@@ -38,6 +39,7 @@ optDict = {
         "authType": "string",
         "authCred": "string",
         "authFile": "string",
+        "abortCode": "string",
         "ignoreCode": "string",
         "ignoreProxy": "boolean",
         "ignoreRedirects": "boolean",
@@ -45,6 +47,7 @@ optDict = {
         "proxy": "string",
         "proxyCred": "string",
         "proxyFile": "string",
+        "proxyFreq": "integer",
         "tor": "boolean",
         "torPort": "integer",
         "torType": "string",
@@ -52,6 +55,7 @@ optDict = {
         "delay": "float",
         "timeout": "float",
         "retries": "integer",
+        "retryOn": "string",
         "rParam": "string",
         "safeUrl": "string",
         "safePost": "string",
@@ -61,6 +65,8 @@ optDict = {
         "csrfToken": "string",
         "csrfUrl": "string",
         "csrfMethod": "string",
+        "csrfData": "string",
+        "csrfRetries": "integer",
         "forceSSL": "boolean",
         "chunked": "boolean",
         "hpp": "boolean",
@@ -199,8 +205,11 @@ optDict = {
 
     "General": {
         "trafficFile": "string",
+        "abortOnEmpty": "boolean",
         "answers": "string",
         "batch": "boolean",
+        "base64Parameter": "string",
+        "base64Safe": "boolean",
         "binaryFields": "string",
         "charset": "string",
         "checkInternet": "boolean",
@@ -208,6 +217,7 @@ optDict = {
         "crawlDepth": "integer",
         "crawlExclude": "string",
         "csvDel": "string",
+        "dumpFile": "string",
         "dumpFormat": "string",
         "encoding": "string",
         "eta": "boolean",
@@ -219,10 +229,12 @@ optDict = {
         "hexConvert": "boolean",
         "outputDir": "string",
         "parseErrors": "boolean",
+        "postprocess": "string",
         "preprocess": "string",
         "repair": "boolean",
         "saveConfig": "string",
         "scope": "string",
+        "skipHeuristics": "boolean",
         "skipWaf": "boolean",
         "testFilter": "string",
         "testSkip": "string",
@@ -235,6 +247,7 @@ optDict = {
         "dependencies": "boolean",
         "disableColoring": "boolean",
         "listTampers": "boolean",
+        "noLogging": "boolean",
         "offline": "boolean",
         "purge": "boolean",
         "resultsFile": "string",
@@ -252,9 +265,6 @@ optDict = {
         "forceDns": "boolean",
         "murphyRate": "integer",
         "smokeTest": "boolean",
-        "liveTest": "boolean",
-        "stopFail": "boolean",
-        "runCase": "string",
     },
 
     "API": {

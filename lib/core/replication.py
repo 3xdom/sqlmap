@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
 import sqlite3
 
+from lib.core.common import cleanReplaceUnicode
 from lib.core.common import getSafeExString
 from lib.core.common import unsafeSQLIdentificatorNaming
 from lib.core.exception import SqlmapConnectionException
@@ -29,7 +30,7 @@ class Replication(object):
             self.cursor = self.connection.cursor()
         except sqlite3.OperationalError as ex:
             errMsg = "error occurred while opening a replication "
-            errMsg += "file '%s' ('%s')" % (self.filepath, getSafeExString(ex))
+            errMsg += "file '%s' ('%s')" % (dbpath, getSafeExString(ex))
             raise SqlmapConnectionException(errMsg)
 
     class DataType(object):
@@ -81,7 +82,10 @@ class Replication(object):
 
         def execute(self, sql, parameters=None):
             try:
-                self.parent.cursor.execute(sql, parameters or [])
+                try:
+                    self.parent.cursor.execute(sql, parameters or [])
+                except UnicodeError:
+                    self.parent.cursor.execute(sql, cleanReplaceUnicode(parameters or []))
             except sqlite3.OperationalError as ex:
                 errMsg = "problem occurred ('%s') while accessing sqlite database " % getSafeExString(ex, UNICODE_ENCODING)
                 errMsg += "located at '%s'. Please make sure that " % self.parent.dbpath

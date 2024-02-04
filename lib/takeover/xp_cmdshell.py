@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -166,9 +166,12 @@ class XP_cmdshell(object):
         # Obfuscate the command to execute, also useful to bypass filters
         # on single-quotes
         self._randStr = randomStr(lowercase=True)
-        self._cmd = "0x%s" % encodeHex(cmd, binary=False)
         self._forgedCmd = "DECLARE @%s VARCHAR(8000);" % self._randStr
-        self._forgedCmd += "SET @%s=%s;" % (self._randStr, self._cmd)
+
+        try:
+            self._forgedCmd += "SET @%s=%s;" % (self._randStr, "0x%s" % encodeHex(cmd, binary=False))
+        except UnicodeError:
+            self._forgedCmd += "SET @%s='%s';" % (self._randStr, cmd)
 
         # Insert the command standard output into a support table,
         # 'sqlmapoutput', except when DBMS credentials are provided because
@@ -267,7 +270,7 @@ class XP_cmdshell(object):
                         kb.xpCmdshellAvailable = True
 
                     else:
-                        logger.warn("xp_cmdshell re-enabling failed")
+                        logger.warning("xp_cmdshell re-enabling failed")
 
                         logger.info("creating xp_cmdshell with sp_OACreate")
                         self._xpCmdshellConfigure(0)
@@ -280,7 +283,7 @@ class XP_cmdshell(object):
                         else:
                             warnMsg = "xp_cmdshell creation failed, probably "
                             warnMsg += "because sp_OACreate is disabled"
-                            logger.warn(warnMsg)
+                            logger.warning(warnMsg)
 
             hashDBWrite(HASHDB_KEYS.KB_XP_CMDSHELL_AVAILABLE, kb.xpCmdshellAvailable)
 

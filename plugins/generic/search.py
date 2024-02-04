@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -34,6 +34,7 @@ from lib.core.exception import SqlmapMissingMandatoryOptionException
 from lib.core.exception import SqlmapUserQuitException
 from lib.core.settings import CURRENT_DB
 from lib.core.settings import METADB_SUFFIX
+from lib.core.settings import UPPER_CASE_DBMSES
 from lib.request import inject
 from lib.utils.brute import columnExists
 from lib.utils.brute import tableExists
@@ -63,7 +64,7 @@ class Search(object):
             values = []
             db = safeSQLIdentificatorNaming(db)
 
-            if Backend.getIdentifiedDbms() in (DBMS.ORACLE, DBMS.DB2, DBMS.HSQLDB, DBMS.H2):
+            if Backend.getIdentifiedDbms() in UPPER_CASE_DBMSES:
                 db = db.upper()
 
             infoMsg = "searching database"
@@ -118,7 +119,7 @@ class Search(object):
                     if dbConsider == "1":
                         warnMsg += "s LIKE"
                     warnMsg += " '%s' found" % unsafeSQLIdentificatorNaming(db)
-                    logger.warn(warnMsg)
+                    logger.warning(warnMsg)
 
                     continue
 
@@ -148,7 +149,7 @@ class Search(object):
             bruteForce = True
 
         if bruteForce:
-            message = "do you want to use common table existence check? %s" % ("[Y/n/q]" if Backend.getIdentifiedDbms() in (DBMS.ACCESS,) else "[y/N/q]")
+            message = "do you want to use common table existence check? %s" % ("[Y/n/q]" if Backend.getIdentifiedDbms() in (DBMS.ACCESS, DBMS.MCKOI, DBMS.EXTREMEDB) else "[y/N/q]")
             choice = readInput(message, default='Y' if 'Y' in message else 'N').upper()
 
             if choice == 'N':
@@ -170,7 +171,7 @@ class Search(object):
             values = []
             tbl = safeSQLIdentificatorNaming(tbl, True)
 
-            if Backend.getIdentifiedDbms() in (DBMS.ORACLE, DBMS.DB2, DBMS.FIREBIRD, DBMS.HSQLDB, DBMS.H2):
+            if Backend.getIdentifiedDbms() in UPPER_CASE_DBMSES:
                 tbl = tbl.upper()
                 conf.db = conf.db.upper() if conf.db else conf.db
 
@@ -192,6 +193,9 @@ class Search(object):
                 logger.info(msg)
             else:
                 whereDbsQuery = ""
+
+            if dbCond and conf.exclude:
+                whereDbsQuery += " AND %s NOT LIKE '%s'" % (dbCond, re.sub(r"\.[*+]", '%', conf.exclude._original))
 
             logger.info(infoMsg)
 
@@ -245,7 +249,7 @@ class Search(object):
                             if tblConsider == "1":
                                 warnMsg += "s LIKE"
                             warnMsg += " '%s'" % unsafeSQLIdentificatorNaming(tbl)
-                            logger.warn(warnMsg)
+                            logger.warning(warnMsg)
 
                             continue
 
@@ -298,7 +302,7 @@ class Search(object):
                             warnMsg += "s LIKE"
                         warnMsg += " '%s' " % unsafeSQLIdentificatorNaming(tbl)
                         warnMsg += "in database '%s'" % unsafeSQLIdentificatorNaming(db)
-                        logger.warn(warnMsg)
+                        logger.warning(warnMsg)
 
                         continue
 
@@ -335,7 +339,7 @@ class Search(object):
 
         if not foundTbls:
             warnMsg = "no databases contain any of the provided tables"
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
             return
 
         conf.dumper.dbTables(foundTbls)
@@ -344,13 +348,15 @@ class Search(object):
     def searchColumn(self):
         bruteForce = False
 
+        self.forceDbmsEnum()
+
         if Backend.isDbms(DBMS.MYSQL) and not kb.data.has_information_schema:
             errMsg = "information_schema not available, "
             errMsg += "back-end DBMS is MySQL < 5.0"
             bruteForce = True
 
         if bruteForce:
-            message = "do you want to use common column existence check? %s" % ("[Y/n/q]" if Backend.getIdentifiedDbms() in (DBMS.ACCESS,) else "[y/N/q]")
+            message = "do you want to use common column existence check? %s" % ("[Y/n/q]" if Backend.getIdentifiedDbms() in (DBMS.ACCESS, DBMS.MCKOI, DBMS.EXTREMEDB) else "[y/N/q]")
             choice = readInput(message, default='Y' if 'Y' in message else 'N').upper()
 
             if choice == 'N':
@@ -393,7 +399,7 @@ class Search(object):
             conf.db = origDb
             conf.tbl = origTbl
 
-            if Backend.getIdentifiedDbms() in (DBMS.ORACLE, DBMS.DB2, DBMS.HSQLDB, DBMS.H2):
+            if Backend.getIdentifiedDbms() in UPPER_CASE_DBMSES:
                 column = column.upper()
                 conf.db = conf.db.upper() if conf.db else conf.db
                 conf.tbl = conf.tbl.upper() if conf.tbl else conf.tbl
@@ -405,24 +411,31 @@ class Search(object):
 
             foundCols[column] = {}
 
-            if conf.tbl:
-                _ = conf.tbl.split(',')
-                whereTblsQuery = " AND (" + " OR ".join("%s = '%s'" % (tblCond, unsafeSQLIdentificatorNaming(tbl)) for tbl in _) + ")"
-                infoMsgTbl = " for table%s '%s'" % ("s" if len(_) > 1 else "", ", ".join(unsafeSQLIdentificatorNaming(tbl) for tbl in _))
+            if tblCond:
+                if conf.tbl:
+                    tbls = conf.tbl.split(',')
+                    if conf.exclude:
+                        tbls = [_ for _ in tbls if re.search(conf.exclude, _, re.I) is None]
+                    whereTblsQuery = " AND (" + " OR ".join("%s = '%s'" % (tblCond, unsafeSQLIdentificatorNaming(tbl)) for tbl in tbls) + ")"
+                    infoMsgTbl = " for table%s '%s'" % ("s" if len(tbls) > 1 else "", ", ".join(unsafeSQLIdentificatorNaming(tbl) for tbl in tbls))
 
             if conf.db == CURRENT_DB:
                 conf.db = self.getCurrentDb()
 
-            if conf.db:
-                _ = conf.db.split(',')
-                whereDbsQuery = " AND (" + " OR ".join("%s = '%s'" % (dbCond, unsafeSQLIdentificatorNaming(db)) for db in _) + ")"
-                infoMsgDb = " in database%s '%s'" % ("s" if len(_) > 1 else "", ", ".join(unsafeSQLIdentificatorNaming(db) for db in _))
-            elif conf.excludeSysDbs:
-                whereDbsQuery = "".join(" AND %s != '%s'" % (dbCond, unsafeSQLIdentificatorNaming(db)) for db in self.excludeDbsList)
-                msg = "skipping system database%s '%s'" % ("s" if len(self.excludeDbsList) > 1 else "", ", ".join(unsafeSQLIdentificatorNaming(db) for db in self.excludeDbsList))
-                logger.info(msg)
-            else:
-                infoMsgDb = " across all databases"
+            if dbCond:
+                if conf.db:
+                    _ = conf.db.split(',')
+                    whereDbsQuery = " AND (" + " OR ".join("%s = '%s'" % (dbCond, unsafeSQLIdentificatorNaming(db)) for db in _) + ")"
+                    infoMsgDb = " in database%s '%s'" % ("s" if len(_) > 1 else "", ", ".join(unsafeSQLIdentificatorNaming(db) for db in _))
+                elif conf.excludeSysDbs:
+                    whereDbsQuery = "".join(" AND %s != '%s'" % (dbCond, unsafeSQLIdentificatorNaming(db)) for db in self.excludeDbsList)
+                    msg = "skipping system database%s '%s'" % ("s" if len(self.excludeDbsList) > 1 else "", ", ".join(unsafeSQLIdentificatorNaming(db) for db in self.excludeDbsList))
+                    logger.info(msg)
+                else:
+                    infoMsgDb = " across all databases"
+
+                if conf.exclude:
+                    whereDbsQuery += " AND %s NOT LIKE '%s'" % (dbCond, re.sub(r"\.[*+]", '%', conf.exclude._original))
 
             logger.info("%s%s%s" % (infoMsg, infoMsgTbl, infoMsgDb))
 
@@ -494,7 +507,7 @@ class Search(object):
                         if colConsider == "1":
                             warnMsg += "s LIKE"
                         warnMsg += " '%s'" % unsafeSQLIdentificatorNaming(column)
-                        logger.warn("%s%s" % (warnMsg, infoMsgTbl))
+                        logger.warning("%s%s" % (warnMsg, infoMsgTbl))
 
                         continue
 
@@ -537,8 +550,12 @@ class Search(object):
                         logger.info(infoMsg)
 
                         query = rootQuery.blind.count2
-                        query = query % unsafeSQLIdentificatorNaming(db)
-                        query += " AND %s" % colQuery
+                        if not re.search(r"(?i)%s\Z" % METADB_SUFFIX, db or ""):
+                            query = query % unsafeSQLIdentificatorNaming(db)
+                            query += " AND %s" % colQuery
+                        else:
+                            query = query % colQuery
+
                         query += whereTblsQuery
 
                         count = inject.getValue(query, union=False, error=False, expected=EXPECTED.INT, charsetType=CHARSET_TYPE.DIGITS)
@@ -549,7 +566,7 @@ class Search(object):
                                 warnMsg += "s LIKE"
                             warnMsg += " '%s' " % unsafeSQLIdentificatorNaming(column)
                             warnMsg += "in database '%s'" % unsafeSQLIdentificatorNaming(db)
-                            logger.warn(warnMsg)
+                            logger.warning(warnMsg)
 
                             continue
 
@@ -558,8 +575,12 @@ class Search(object):
                         for index in indexRange:
                             query = rootQuery.blind.query2
 
-                            if query.endswith("'%s')"):
+                            if re.search(r"(?i)%s\Z" % METADB_SUFFIX, db or ""):
+                                query = query % (colQuery + whereTblsQuery)
+                            elif query.endswith("'%s')"):
                                 query = query[:-1] + " AND %s)" % (colQuery + whereTblsQuery)
+                            elif " ORDER BY " in query:
+                                query = query.replace(" ORDER BY ", " AND %s ORDER BY " % (colQuery + whereTblsQuery))
                             else:
                                 query += " AND %s" % (colQuery + whereTblsQuery)
 
@@ -599,10 +620,10 @@ class Search(object):
         else:
             warnMsg = "no databases have tables containing any of the "
             warnMsg += "provided columns"
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
 
     def search(self):
-        if Backend.getIdentifiedDbms() in (DBMS.ORACLE, DBMS.DB2):
+        if Backend.getIdentifiedDbms() in UPPER_CASE_DBMSES:
             for item in ('db', 'tbl', 'col'):
                 if getattr(conf, item, None):
                     setattr(conf, item, getattr(conf, item).upper())

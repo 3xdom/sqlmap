@@ -1,6 +1,6 @@
-# sqlmap
+# sqlmap ![](https://i.imgur.com/fe85aVR.png)
 
-[![Build Status](https://api.travis-ci.org/sqlmapproject/sqlmap.svg?branch=master)](https://travis-ci.org/sqlmapproject/sqlmap) [![Python 2.6|2.7|3.x](https://img.shields.io/badge/python-2.6|2.7|3.x-yellow.svg)](https://www.python.org/) [![License](https://img.shields.io/badge/license-GPLv2-red.svg)](https://raw.githubusercontent.com/sqlmapproject/sqlmap/master/LICENSE) [![PyPI version](https://badge.fury.io/py/sqlmap.svg)](https://badge.fury.io/py/sqlmap) [![GitHub closed issues](https://img.shields.io/github/issues-closed-raw/sqlmapproject/sqlmap.svg?colorB=ff69b4)](https://github.com/sqlmapproject/sqlmap/issues?q=is%3Aissue+is%3Aclosed) [![Twitter](https://img.shields.io/badge/twitter-@sqlmap-blue.svg)](https://twitter.com/sqlmap)
+[![.github/workflows/tests.yml](https://github.com/sqlmapproject/sqlmap/actions/workflows/tests.yml/badge.svg)](https://github.com/sqlmapproject/sqlmap/actions/workflows/tests.yml) [![Python 2.6|2.7|3.x](https://img.shields.io/badge/python-2.6|2.7|3.x-yellow.svg)](https://www.python.org/) [![License](https://img.shields.io/badge/license-GPLv2-red.svg)](https://raw.githubusercontent.com/sqlmapproject/sqlmap/master/LICENSE) [![Twitter](https://img.shields.io/badge/twitter-@sqlmap-blue.svg)](https://twitter.com/sqlmap)
 
 sqlmap은 SQL 인젝션 결함 탐지 및 활용, 데이터베이스 서버 장악 프로세스를 자동화 하는 오픈소스 침투 테스팅 도구입니다. 최고의 침투 테스터, 데이터베이스 핑거프린팅 부터 데이터베이스 데이터 읽기, 대역 외 연결을 통한 기반 파일 시스템 접근 및 명령어 실행에 걸치는 광범위한 스위치들을 위한 강력한 탐지 엔진과 다수의 편리한 기능이 탑재되어 있습니다.
 
@@ -20,7 +20,7 @@ sqlmap은 SQL 인젝션 결함 탐지 및 활용, 데이터베이스 서버 장�
 
     git clone --depth 1 https://github.com/sqlmapproject/sqlmap.git sqlmap-dev
 
-sqlmap은 [Python](http://www.python.org/download/) 버전 **2.6**, **2.7** 그리고 **3.x** 을 통해 모든 플랫폼 위에서 사용 가능합니다.
+sqlmap은 [Python](https://www.python.org/download/) 버전 **2.6**, **2.7** 그리고 **3.x** 을 통해 모든 플랫폼 위에서 사용 가능합니다.
 
 사용법
 ----
@@ -39,12 +39,12 @@ sqlmap의 능력, 지원되는 기능과 모든 옵션과 스위치들의 목록
 링크
 ----
 
-* 홈페이지: http://sqlmap.org
+* 홈페이지: https://sqlmap.org
 * 다운로드: [.tar.gz](https://github.com/sqlmapproject/sqlmap/tarball/master) or [.zip](https://github.com/sqlmapproject/sqlmap/zipball/master)
 * RSS 피드 커밋: https://github.com/sqlmapproject/sqlmap/commits/master.atom
 * Issue tracker: https://github.com/sqlmapproject/sqlmap/issues
 * 사용자 매뉴얼: https://github.com/sqlmapproject/sqlmap/wiki
 * 자주 묻는 질문 (FAQ): https://github.com/sqlmapproject/sqlmap/wiki/FAQ
 * 트위터: [@sqlmap](https://twitter.com/sqlmap)
-* 시연 영상: [http://www.youtube.com/user/inquisb/videos](http://www.youtube.com/user/inquisb/videos)
+* 시연 영상: [https://www.youtube.com/user/inquisb/videos](https://www.youtube.com/user/inquisb/videos)
 * 스크린샷: https://github.com/sqlmapproject/sqlmap/wiki/Screenshots

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -12,6 +12,7 @@ import time
 
 from lib.core.agent import agent
 from lib.core.bigarray import BigArray
+from lib.core.common import applyFunctionRecursively
 from lib.core.common import Backend
 from lib.core.common import calculateDeltaSeconds
 from lib.core.common import cleanQuery
@@ -105,12 +106,14 @@ def _goInference(payload, expression, charsetType=None, firstChar=None, lastChar
         if (conf.eta or conf.threads > 1) and Backend.getIdentifiedDbms() and not re.search(r"(COUNT|LTRIM)\(", expression, re.I) and not (timeBasedCompare and not kb.forceThreads):
 
             if field and re.search(r"\ASELECT\s+DISTINCT\((.+?)\)\s+FROM", expression, re.I):
-                expression = "SELECT %s FROM (%s)" % (field, expression)
+                if Backend.getIdentifiedDbms() in (DBMS.MYSQL, DBMS.PGSQL, DBMS.MONETDB, DBMS.VERTICA, DBMS.CRATEDB, DBMS.CUBRID):
+                    alias = randomStr(lowercase=True, seed=hash(expression))
+                    expression = "SELECT %s FROM (%s)" % (field if '.' not in field else re.sub(r".+\.", "%s." % alias, field), expression)  # Note: MonetDB as a prime example
+                    expression += " AS %s" % alias
+                else:
+                    expression = "SELECT %s FROM (%s)" % (field, expression)
 
-                if Backend.getIdentifiedDbms() in (DBMS.MYSQL, DBMS.PGSQL):
-                    expression += " AS %s" % randomStr(lowercase=True, seed=hash(expression))
-
-            if field and conf.hexConvert or conf.binaryFields and field in conf.binaryFields.split(','):
+            if field and conf.hexConvert or conf.binaryFields and field in conf.binaryFields or Backend.getIdentifiedDbms() in (DBMS.RAIMA,):
                 nulledCastedField = agent.nullAndCastField(field)
                 injExpression = expression.replace(field, nulledCastedField, 1)
             else:
@@ -124,7 +127,7 @@ def _goInference(payload, expression, charsetType=None, firstChar=None, lastChar
         kb.inferenceMode = False
 
         if not kb.bruteMode:
-            debugMsg = "performed %d queries in %.2f seconds" % (count, calculateDeltaSeconds(start))
+            debugMsg = "performed %d quer%s in %.2f seconds" % (count, 'y' if count == 1 else "ies", calculateDeltaSeconds(start))
             logger.debug(debugMsg)
 
     return value
@@ -195,7 +198,7 @@ def _goInferenceProxy(expression, fromUser=False, batch=False, unpack=True, char
     # forge the SQL limiting the query output one entry at a time
     # NOTE: we assume that only queries that get data from a table
     # can return multiple entries
-    if fromUser and " FROM " in expression.upper() and ((Backend.getIdentifiedDbms() not in FROM_DUMMY_TABLE) or (Backend.getIdentifiedDbms() in FROM_DUMMY_TABLE and not expression.upper().endswith(FROM_DUMMY_TABLE[Backend.getIdentifiedDbms()]))) and not re.search(SQL_SCALAR_REGEX, expression, re.I):
+    if fromUser and " FROM " in expression.upper() and ((Backend.getIdentifiedDbms() not in FROM_DUMMY_TABLE) or (Backend.getIdentifiedDbms() in FROM_DUMMY_TABLE and not expression.upper().endswith(FROM_DUMMY_TABLE[Backend.getIdentifiedDbms()]))) and not re.search(SQL_SCALAR_REGEX, expression, re.I) and hasattr(queries[Backend.getIdentifiedDbms()].limitregexp, "query"):
         expression, limitCond, topLimit, startLimit, stopLimit = agent.limitCondition(expression)
 
         if limitCond:
@@ -267,7 +270,7 @@ def _goInferenceProxy(expression, fromUser=False, batch=False, unpack=True, char
                         warnMsg += "of entries for the SQL query provided. "
                         warnMsg += "sqlmap will assume that it returns only "
                         warnMsg += "one entry"
-                        logger.warn(warnMsg)
+                        logger.warning(warnMsg)
 
                         stopLimit = 1
 
@@ -275,7 +278,7 @@ def _goInferenceProxy(expression, fromUser=False, batch=False, unpack=True, char
                         if not count:
                             warnMsg = "the SQL query provided does not "
                             warnMsg += "return any output"
-                            logger.warn(warnMsg)
+                            logger.warning(warnMsg)
 
                         return None
 
@@ -284,7 +287,7 @@ def _goInferenceProxy(expression, fromUser=False, batch=False, unpack=True, char
 
                 try:
                     try:
-                        for num in xrange(startLimit, stopLimit):
+                        for num in xrange(startLimit or 0, stopLimit or 0):
                             output = _goInferenceFields(expression, expressionFields, expressionFieldsList, payload, num=num, charsetType=charsetType, firstChar=firstChar, lastChar=lastChar, dump=dump)
                             outputs.append(output)
                     except OverflowError:
@@ -295,7 +298,7 @@ def _goInferenceProxy(expression, fromUser=False, batch=False, unpack=True, char
                 except KeyboardInterrupt:
                     print()
                     warnMsg = "user aborted during dumping phase"
-                    logger.warn(warnMsg)
+                    logger.warning(warnMsg)
 
                 return outputs
 
@@ -410,6 +413,12 @@ def getValue(expression, blind=True, union=True, error=True, time=True, fromUser
                     kb.forcePartialUnion = kb.injection.data[PAYLOAD.TECHNIQUE.UNION].vector[8]
                     fallback = not expected and kb.injection.data[PAYLOAD.TECHNIQUE.UNION].where == PAYLOAD.WHERE.ORIGINAL and not kb.forcePartialUnion
 
+                    if expected == EXPECTED.BOOL:
+                        # Note: some DBMSes (e.g. Altibase) don't support implicit conversion of boolean check result during concatenation with prefix and suffix (e.g. 'qjjvq'||(1=1)||'qbbbq')
+
+                        if not any(_ in forgeCaseExpression for _ in ("SELECT", "CASE")):
+                            forgeCaseExpression = "(CASE WHEN (%s) THEN '1' ELSE '0' END)" % forgeCaseExpression
+
                     try:
                         value = _goUnion(forgeCaseExpression if expected == EXPECTED.BOOL else query, unpack, dump)
                     except SqlmapConnectionException:
@@ -491,11 +500,36 @@ def getValue(expression, blind=True, union=True, error=True, time=True, fromUser
 
     kb.safeCharEncode = False
 
-    if not any((kb.testMode, conf.dummy, conf.offline)) and value is None and Backend.getDbms() and conf.dbmsHandler and not conf.noCast and not conf.hexConvert:
-        warnMsg = "in case of continuous data retrieval problems you are advised to try "
-        warnMsg += "a switch '--no-cast' "
-        warnMsg += "or switch '--hex'" if Backend.getIdentifiedDbms() not in (DBMS.ACCESS, DBMS.FIREBIRD) else ""
-        singleTimeWarnMessage(warnMsg)
+    if not any((kb.testMode, conf.dummy, conf.offline, conf.noCast, conf.hexConvert)) and value is None and Backend.getDbms() and conf.dbmsHandler and kb.fingerprinted:
+        if conf.abortOnEmpty:
+            errMsg = "aborting due to empty data retrieval"
+            logger.critical(errMsg)
+            raise SystemExit
+        else:
+            warnMsg = "in case of continuous data retrieval problems you are advised to try "
+            warnMsg += "a switch '--no-cast' "
+            warnMsg += "or switch '--hex'" if hasattr(queries[Backend.getIdentifiedDbms()], "hex") else ""
+            singleTimeWarnMessage(warnMsg)
+
+    # Dirty patch (MSSQL --binary-fields with 0x31003200...)
+    if Backend.isDbms(DBMS.MSSQL) and conf.binaryFields:
+        def _(value):
+            if isinstance(value, six.text_type):
+                if value.startswith(u"0x"):
+                    value = value[2:]
+                    if value and len(value) % 4 == 0:
+                        candidate = ""
+                        for i in xrange(len(value)):
+                            if i % 4 < 2:
+                                candidate += value[i]
+                            elif value[i] != '0':
+                                candidate = None
+                                break
+                        if candidate:
+                            value = candidate
+            return value
+
+        value = applyFunctionRecursively(value, _)
 
     # Dirty patch (safe-encoded unicode characters)
     if isinstance(value, six.text_type) and "\\x" in value:

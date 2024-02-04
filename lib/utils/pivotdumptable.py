@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -30,6 +30,7 @@ from lib.core.exception import SqlmapConnectionException
 from lib.core.exception import SqlmapNoneDataException
 from lib.core.settings import MAX_INT
 from lib.core.settings import NULL
+from lib.core.settings import SINGLE_QUOTE_MARKER
 from lib.core.unescaper import unescaper
 from lib.request import inject
 from lib.utils.safe2bin import safechardecode
@@ -87,7 +88,7 @@ def pivotDumpTable(table, colList, count=None, blind=True, alias=None):
         if not validPivotValue:
             warnMsg = "column '%s' not " % conf.pivotColumn
             warnMsg += "found in table '%s'" % table
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
 
     if not validPivotValue:
         for column in colList:
@@ -113,13 +114,13 @@ def pivotDumpTable(table, colList, count=None, blind=True, alias=None):
                     break
 
         if not validColumnList:
-            errMsg = "all column name(s) provided are non-existent"
+            errMsg = "all provided column name(s) are non-existent"
             raise SqlmapNoneDataException(errMsg)
 
         if not validPivotValue:
             warnMsg = "no proper pivot column provided (with unique values)."
             warnMsg += " It won't be possible to retrieve all rows"
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
 
     pivotValue = " "
     breakRetrieval = False
@@ -128,7 +129,7 @@ def pivotDumpTable(table, colList, count=None, blind=True, alias=None):
         if column == colList[0]:
             query = dumpNode.query.replace("'%s'" if unescaper.escape(pivotValue, False) != pivotValue else "%s", "%s") % (agent.preprocessField(table, column), table, agent.preprocessField(table, column), unescaper.escape(pivotValue, False))
         else:
-            query = dumpNode.query2.replace("'%s'" if unescaper.escape(pivotValue, False) != pivotValue else "%s", "%s") % (agent.preprocessField(table, column), table, agent.preprocessField(table, colList[0]), unescaper.escape(pivotValue, False))
+            query = dumpNode.query2.replace("'%s'" if unescaper.escape(pivotValue, False) != pivotValue else "%s", "%s") % (agent.preprocessField(table, column), table, agent.preprocessField(table, colList[0]), unescaper.escape(pivotValue, False) if SINGLE_QUOTE_MARKER not in dumpNode.query2 else pivotValue)
 
         query = agent.whereQuery(query)
         return unArrayizeValue(inject.getValue(query, blind=blind, time=blind, union=not blind, error=not blind))
@@ -176,7 +177,7 @@ def pivotDumpTable(table, colList, count=None, blind=True, alias=None):
 
         warnMsg = "user aborted during enumeration. sqlmap "
         warnMsg += "will display partial output"
-        logger.warn(warnMsg)
+        logger.warning(warnMsg)
 
     except SqlmapConnectionException as ex:
         errMsg = "connection exception detected ('%s'). sqlmap " % getSafeExString(ex)

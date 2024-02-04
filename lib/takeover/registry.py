@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
 import os
 
+from lib.core.common import openFile
 from lib.core.common import randomStr
 from lib.core.data import conf
 from lib.core.data import logger
@@ -48,7 +49,7 @@ class Registry(object):
         )
 
     def _createLocalBatchFile(self):
-        self._batPathFp = open(self._batPathLocal, "w")
+        self._batPathFp = openFile(self._batPathLocal, "w")
 
         if self._operation == REGISTRY_OPERATION.READ:
             lines = self._batRead

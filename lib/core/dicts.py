@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -10,20 +10,35 @@ from lib.core.enums import DBMS
 from lib.core.enums import OS
 from lib.core.enums import POST_HINT
 from lib.core.settings import ACCESS_ALIASES
+from lib.core.settings import ALTIBASE_ALIASES
 from lib.core.settings import BLANK
+from lib.core.settings import CACHE_ALIASES
+from lib.core.settings import CRATEDB_ALIASES
+from lib.core.settings import CUBRID_ALIASES
 from lib.core.settings import DB2_ALIASES
+from lib.core.settings import DERBY_ALIASES
+from lib.core.settings import EXTREMEDB_ALIASES
 from lib.core.settings import FIREBIRD_ALIASES
+from lib.core.settings import FRONTBASE_ALIASES
 from lib.core.settings import H2_ALIASES
 from lib.core.settings import HSQLDB_ALIASES
 from lib.core.settings import INFORMIX_ALIASES
 from lib.core.settings import MAXDB_ALIASES
+from lib.core.settings import MCKOI_ALIASES
+from lib.core.settings import MIMERSQL_ALIASES
+from lib.core.settings import MONETDB_ALIASES
 from lib.core.settings import MSSQL_ALIASES
 from lib.core.settings import MYSQL_ALIASES
 from lib.core.settings import NULL
 from lib.core.settings import ORACLE_ALIASES
 from lib.core.settings import PGSQL_ALIASES
+from lib.core.settings import PRESTO_ALIASES
+from lib.core.settings import RAIMA_ALIASES
 from lib.core.settings import SQLITE_ALIASES
 from lib.core.settings import SYBASE_ALIASES
+from lib.core.settings import VERTICA_ALIASES
+from lib.core.settings import VIRTUOSO_ALIASES
+from lib.core.settings import CLICKHOUSE_ALIASES
 
 FIREBIRD_TYPES = {
     261: "BLOB",
@@ -108,6 +123,28 @@ SYBASE_TYPES = {
     20: "image",
 }
 
+ALTIBASE_TYPES = {
+    1: "CHAR",
+    12: "VARCHAR",
+    -8: "NCHAR",
+    -9: "NVARCHAR",
+    2: "NUMERIC",
+    6: "FLOAT",
+    8: "DOUBLE",
+    7: "REAL",
+    -5: "BIGINT",
+    4: "INTEGER",
+    5: "SMALLINT",
+    9: "DATE",
+    30: "BLOB",
+    40: "CLOB",
+    20001: "BYTE",
+    20002: "NIBBLE",
+    -7: "BIT",
+    -100: "VARBIT",
+    10003: "GEOMETRY",
+}
+
 MYSQL_PRIVS = {
     1: "select_priv",
     2: "insert_priv",
@@ -187,19 +224,35 @@ DUMP_REPLACEMENTS = {" ": NULL, "": BLANK}
 DBMS_DICT = {
     DBMS.MSSQL: (MSSQL_ALIASES, "python-pymssql", "https://github.com/pymssql/pymssql", "mssql+pymssql"),
     DBMS.MYSQL: (MYSQL_ALIASES, "python-pymysql", "https://github.com/PyMySQL/PyMySQL", "mysql"),
-    DBMS.PGSQL: (PGSQL_ALIASES, "python-psycopg2", "http://initd.org/psycopg/", "postgresql"),
+    DBMS.PGSQL: (PGSQL_ALIASES, "python-psycopg2", "https://github.com/psycopg/psycopg2", "postgresql"),
     DBMS.ORACLE: (ORACLE_ALIASES, "python cx_Oracle", "https://oracle.github.io/python-cx_Oracle/", "oracle"),
-    DBMS.SQLITE: (SQLITE_ALIASES, "python-sqlite", "https://docs.python.org/2/library/sqlite3.html", "sqlite"),
+    DBMS.SQLITE: (SQLITE_ALIASES, "python-sqlite", "https://docs.python.org/3/library/sqlite3.html", "sqlite"),
     DBMS.ACCESS: (ACCESS_ALIASES, "python-pyodbc", "https://github.com/mkleehammer/pyodbc", "access"),
     DBMS.FIREBIRD: (FIREBIRD_ALIASES, "python-kinterbasdb", "http://kinterbasdb.sourceforge.net/", "firebird"),
     DBMS.MAXDB: (MAXDB_ALIASES, None, None, "maxdb"),
     DBMS.SYBASE: (SYBASE_ALIASES, "python-pymssql", "https://github.com/pymssql/pymssql", "sybase"),
     DBMS.DB2: (DB2_ALIASES, "python ibm-db", "https://github.com/ibmdb/python-ibmdb", "ibm_db_sa"),
-    DBMS.HSQLDB: (HSQLDB_ALIASES, "python jaydebeapi & python-jpype", "https://pypi.python.org/pypi/JayDeBeApi/ & http://jpype.sourceforge.net/", None),
+    DBMS.HSQLDB: (HSQLDB_ALIASES, "python jaydebeapi & python-jpype", "https://pypi.python.org/pypi/JayDeBeApi/ & https://github.com/jpype-project/jpype", None),
     DBMS.H2: (H2_ALIASES, None, None, None),
     DBMS.INFORMIX: (INFORMIX_ALIASES, "python ibm-db", "https://github.com/ibmdb/python-ibmdb", "ibm_db_sa"),
+    DBMS.MONETDB: (MONETDB_ALIASES, "pymonetdb", "https://github.com/gijzelaerr/pymonetdb", "monetdb"),
+    DBMS.DERBY: (DERBY_ALIASES, "pydrda", "https://github.com/nakagami/pydrda/", None),
+    DBMS.VERTICA: (VERTICA_ALIASES, "vertica-python", "https://github.com/vertica/vertica-python", "vertica+vertica_python"),
+    DBMS.MCKOI: (MCKOI_ALIASES, None, None, None),
+    DBMS.PRESTO: (PRESTO_ALIASES, "presto-python-client", "https://github.com/prestodb/presto-python-client", None),
+    DBMS.ALTIBASE: (ALTIBASE_ALIASES, None, None, None),
+    DBMS.MIMERSQL: (MIMERSQL_ALIASES, "mimerpy", "https://github.com/mimersql/MimerPy", None),
+    DBMS.CLICKHOUSE: (CLICKHOUSE_ALIASES, "clickhouse_connect", "https://github.com/ClickHouse/clickhouse-connect", None),
+    DBMS.CRATEDB: (CRATEDB_ALIASES, "python-psycopg2", "https://github.com/psycopg/psycopg2", "postgresql"),
+    DBMS.CUBRID: (CUBRID_ALIASES, "CUBRID-Python", "https://github.com/CUBRID/cubrid-python", None),
+    DBMS.CACHE: (CACHE_ALIASES, "python jaydebeapi & python-jpype", "https://pypi.python.org/pypi/JayDeBeApi/ & https://github.com/jpype-project/jpype", None),
+    DBMS.EXTREMEDB: (EXTREMEDB_ALIASES, None, None, None),
+    DBMS.FRONTBASE: (FRONTBASE_ALIASES, None, None, None),
+    DBMS.RAIMA: (RAIMA_ALIASES, None, None, None),
+    DBMS.VIRTUOSO: (VIRTUOSO_ALIASES, None, None, None),
 }
 
+# Reference: https://blog.jooq.org/tag/sysibm-sysdummy1/
 FROM_DUMMY_TABLE = {
     DBMS.ORACLE: " FROM DUAL",
     DBMS.ACCESS: " FROM MSysAccessObjects",
@@ -207,7 +260,35 @@ FROM_DUMMY_TABLE = {
     DBMS.MAXDB: " FROM VERSIONS",
     DBMS.DB2: " FROM SYSIBM.SYSDUMMY1",
     DBMS.HSQLDB: " FROM INFORMATION_SCHEMA.SYSTEM_USERS",
-    DBMS.INFORMIX: " FROM SYSMASTER:SYSDUAL"
+    DBMS.INFORMIX: " FROM SYSMASTER:SYSDUAL",
+    DBMS.DERBY: " FROM SYSIBM.SYSDUMMY1",
+    DBMS.MIMERSQL: " FROM SYSTEM.ONEROW",
+    DBMS.FRONTBASE: " FROM INFORMATION_SCHEMA.IO_STATISTICS"
+}
+
+HEURISTIC_NULL_EVAL = {
+    DBMS.ACCESS: "CVAR(NULL)",
+    DBMS.MAXDB: "ALPHA(NULL)",
+    DBMS.MSSQL: "DIFFERENCE(NULL,NULL)",
+    DBMS.MYSQL: "QUARTER(NULL XOR NULL)",
+    DBMS.ORACLE: "INSTR2(NULL,NULL)",
+    DBMS.PGSQL: "QUOTE_IDENT(NULL)",
+    DBMS.SQLITE: "UNLIKELY(NULL)",
+    DBMS.H2: "STRINGTOUTF8(NULL)",
+    DBMS.MONETDB: "CODE(NULL)",
+    DBMS.DERBY: "NULLIF(USER,SESSION_USER)",
+    DBMS.VERTICA: "BITSTRING_TO_BINARY(NULL)",
+    DBMS.MCKOI: "TONUMBER(NULL)",
+    DBMS.PRESTO: "FROM_HEX(NULL)",
+    DBMS.ALTIBASE: "TDESENCRYPT(NULL,NULL)",
+    DBMS.MIMERSQL: "ASCII_CHAR(256)",
+    DBMS.CRATEDB: "MD5(NULL~NULL)",  # Note: NULL~NULL also being evaluated on H2 and Ignite
+    DBMS.CUBRID: "(NULL SETEQ NULL)",
+    DBMS.CACHE: "%SQLUPPER NULL",
+    DBMS.EXTREMEDB: "NULLIFZERO(hashcode(NULL))",
+    DBMS.RAIMA: "IF(ROWNUMBER()>0,CONVERT(NULL,TINYINT),NULL))",
+    DBMS.VIRTUOSO: "__MAX_NOTNULL(NULL)",
+    DBMS.CLICKHOUSE: "halfMD5(NULL) IS NULL",
 }
 
 SQL_STATEMENTS = {
@@ -288,13 +369,14 @@ OBSOLETE_OPTIONS = {
     "--ignore-401": "use '--ignore-code' instead",
     "--second-order": "use '--second-url' instead",
     "--purge-output": "use '--purge' instead",
+    "--sqlmap-shell": "use '--shell' instead",
     "--check-payload": None,
     "--check-waf": None,
     "--pickled-options": "use '--api -c ...' instead",
+    "--identify-waf": "functionality being done automatically",
 }
 
 DEPRECATED_OPTIONS = {
-    "--identify-waf": "functionality being done automatically",
 }
 
 DUMP_DATA_PREPROCESS = {
@@ -304,7 +386,7 @@ DUMP_DATA_PREPROCESS = {
 
 DEFAULT_DOC_ROOTS = {
     OS.WINDOWS: ("C:/xampp/htdocs/", "C:/wamp/www/", "C:/Inetpub/wwwroot/"),
-    OS.LINUX: ("/var/www/", "/var/www/html", "/var/www/htdocs", "/usr/local/apache2/htdocs", "/usr/local/www/data", "/var/apache2/htdocs", "/var/www/nginx-default", "/srv/www/htdocs")  # Reference: https://wiki.apache.org/httpd/DistrosDefaultLayout
+    OS.LINUX: ("/var/www/", "/var/www/html", "/var/www/htdocs", "/usr/local/apache2/htdocs", "/usr/local/www/data", "/var/apache2/htdocs", "/var/www/nginx-default", "/srv/www/htdocs", "/usr/local/var/www")  # Reference: https://wiki.apache.org/httpd/DistrosDefaultLayout
 }
 
 PART_RUN_CONTENT_TYPES = {
@@ -340,6 +422,7 @@ PART_RUN_CONTENT_TYPES = {
 HTML_ENTITIES = {
     "quot": 34,
     "amp": 38,
+    "apos": 39,
     "lt": 60,
     "gt": 62,
     "nbsp": 160,

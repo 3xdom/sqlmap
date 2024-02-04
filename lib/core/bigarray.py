@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -10,11 +10,11 @@ try:
 except:
     import pickle
 
-import bz2
 import itertools
 import os
 import sys
 import tempfile
+import zlib
 
 from lib.core.compat import xrange
 from lib.core.enums import MKSTEMP_PREFIX
@@ -22,19 +22,22 @@ from lib.core.exception import SqlmapSystemException
 from lib.core.settings import BIGARRAY_CHUNK_SIZE
 from lib.core.settings import BIGARRAY_COMPRESS_LEVEL
 
-DEFAULT_SIZE_OF = sys.getsizeof(object())
+try:
+    DEFAULT_SIZE_OF = sys.getsizeof(object())
+except TypeError:
+    DEFAULT_SIZE_OF = 16
 
-def _size_of(object_):
+def _size_of(instance):
     """
-    Returns total size of a given object_ (in bytes)
+    Returns total size of a given instance / object (in bytes)
     """
 
-    retval = sys.getsizeof(object_, DEFAULT_SIZE_OF)
+    retval = sys.getsizeof(instance, DEFAULT_SIZE_OF)
 
-    if isinstance(object_, dict):
-        retval += sum(_size_of(_) for _ in itertools.chain.from_iterable(object_.items()))
-    elif hasattr(object_, "__iter__"):
-        retval += sum(_size_of(_) for _ in object_ if _ != object_)
+    if isinstance(instance, dict):
+        retval += sum(_size_of(_) for _ in itertools.chain.from_iterable(instance.items()))
+    elif hasattr(instance, "__iter__"):
+        retval += sum(_size_of(_) for _ in instance if _ != instance)
 
     return retval
 
@@ -54,8 +57,14 @@ class BigArray(list):
 
     >>> _ = BigArray(xrange(100000))
     >>> _[20] = 0
-    >>> _[100]
-    100
+    >>> _[99999]
+    99999
+    >>> _ += [0]
+    >>> _[100000]
+    0
+    >>> _ = _ + [1]
+    >>> _[-1]
+    1
     """
 
     def __init__(self, items=None):
@@ -68,6 +77,20 @@ class BigArray(list):
 
         for item in (items or []):
             self.append(item)
+
+    def __add__(self, value):
+        retval = BigArray(self)
+
+        for _ in value:
+            retval.append(_)
+
+        return retval
+
+    def __iadd__(self, value):
+        for _ in value:
+            self.append(_)
+
+        return self
 
     def append(self, value):
         self.chunks[-1].append(value)
@@ -92,7 +115,7 @@ class BigArray(list):
             self.chunks.pop()
             try:
                 with open(self.chunks[-1], "rb") as f:
-                    self.chunks[-1] = pickle.loads(bz2.decompress(f.read()))
+                    self.chunks[-1] = pickle.loads(zlib.decompress(f.read()))
             except IOError as ex:
                 errMsg = "exception occurred while retrieving data "
                 errMsg += "from a temporary file ('%s')" % ex
@@ -113,7 +136,7 @@ class BigArray(list):
             self.filenames.add(filename)
             os.close(handle)
             with open(filename, "w+b") as f:
-                f.write(bz2.compress(pickle.dumps(chunk, pickle.HIGHEST_PROTOCOL), BIGARRAY_COMPRESS_LEVEL))
+                f.write(zlib.compress(pickle.dumps(chunk, pickle.HIGHEST_PROTOCOL), BIGARRAY_COMPRESS_LEVEL))
             return filename
         except (OSError, IOError) as ex:
             errMsg = "exception occurred while storing data "
@@ -131,7 +154,7 @@ class BigArray(list):
         if not (self.cache and self.cache.index == index):
             try:
                 with open(self.chunks[index], "rb") as f:
-                    self.cache = Cache(index, pickle.loads(bz2.decompress(f.read())), False)
+                    self.cache = Cache(index, pickle.loads(zlib.decompress(f.read())), False)
             except Exception as ex:
                 errMsg = "exception occurred while retrieving data "
                 errMsg += "from a temporary file ('%s')" % ex
@@ -145,7 +168,7 @@ class BigArray(list):
         self.chunks, self.filenames = state
 
     def __getitem__(self, y):
-        if y < 0:
+        while y < 0:
             y += len(self)
 
         index = y // self.chunk_length

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -18,7 +18,6 @@ try:
         sys.exit("[!] wrong installation detected (missing modules). Visit 'https://github.com/sqlmapproject/sqlmap/#installation' for further details")
 
     import bdb
-    import distutils
     import glob
     import inspect
     import json
@@ -33,9 +32,20 @@ try:
     import traceback
     import warnings
 
+    if "--deprecations" not in sys.argv:
+        warnings.filterwarnings(action="ignore", category=DeprecationWarning)
+    else:
+        warnings.resetwarnings()
+        warnings.filterwarnings(action="ignore", message="'crypt'", category=DeprecationWarning)
+        warnings.simplefilter("ignore", category=ImportWarning)
+        if sys.version_info >= (3, 0):
+            warnings.simplefilter("ignore", category=ResourceWarning)
+
+    warnings.filterwarnings(action="ignore", message="Python 2 is no longer supported")
     warnings.filterwarnings(action="ignore", message=".*was already imported", category=UserWarning)
     warnings.filterwarnings(action="ignore", message=".*using a very old release", category=UserWarning)
-    warnings.filterwarnings(action="ignore", category=DeprecationWarning)
+    warnings.filterwarnings(action="ignore", message=".*default buffer size will be used", category=RuntimeWarning)
+    warnings.filterwarnings(action="ignore", category=UserWarning, module="psycopg2")
 
     from lib.core.data import logger
 
@@ -44,6 +54,7 @@ try:
     from lib.core.common import checkPipedInput
     from lib.core.common import createGithubIssue
     from lib.core.common import dataToStdout
+    from lib.core.common import extractRegexResult
     from lib.core.common import filterNone
     from lib.core.common import getDaysFromLastUpdate
     from lib.core.common import getFileItems
@@ -53,13 +64,15 @@ try:
     from lib.core.common import setPaths
     from lib.core.common import weAreFrozen
     from lib.core.convert import getUnicode
+    from lib.core.common import setColor
+    from lib.core.common import unhandledExceptionMessage
+    from lib.core.compat import LooseVersion
+    from lib.core.compat import xrange
     from lib.core.data import cmdLineOptions
     from lib.core.data import conf
     from lib.core.data import kb
-    from lib.core.common import MKSTEMP_PREFIX
-    from lib.core.common import setColor
-    from lib.core.common import unhandledExceptionMessage
-    from lib.core.compat import xrange
+    from lib.core.datatype import OrderedSet
+    from lib.core.enums import MKSTEMP_PREFIX
     from lib.core.exception import SqlmapBaseException
     from lib.core.exception import SqlmapShellQuitException
     from lib.core.exception import SqlmapSilentQuitException
@@ -77,7 +90,6 @@ try:
     from lib.core.settings import VERSION
     from lib.parse.cmdline import cmdLineParser
     from lib.utils.crawler import crawl
-    from thirdparty import six
 except KeyboardInterrupt:
     errMsg = "user aborted"
 
@@ -110,7 +122,7 @@ def checkEnvironment():
         logger.critical(errMsg)
         raise SystemExit
 
-    if distutils.version.LooseVersion(VERSION) < distutils.version.LooseVersion("1.0"):
+    if LooseVersion(VERSION) < LooseVersion("1.0"):
         errMsg = "your runtime environment (e.g. PYTHONPATH) is "
         errMsg += "broken. Please make sure that you are not running "
         errMsg += "newer versions of sqlmap with runtime scripts for older "
@@ -139,7 +151,8 @@ def main():
         banner()
 
         # Store original command line options for possible later restoration
-        cmdLineOptions.update(cmdLineParser().__dict__)
+        args = cmdLineParser()
+        cmdLineOptions.update(args.__dict__ if hasattr(args, "__dict__") else args)
         initOptions(cmdLineOptions)
 
         if checkPipedInput():
@@ -154,6 +167,7 @@ def main():
             # to an IPC database
             sys.stdout = StdDbOut(conf.taskid, messagetype="stdout")
             sys.stderr = StdDbOut(conf.taskid, messagetype="stderr")
+
             setRestAPILog()
 
         conf.showTime = True
@@ -170,12 +184,9 @@ def main():
             elif conf.vulnTest:
                 from lib.core.testing import vulnTest
                 os._exitcode = 1 - (vulnTest() or 0)
-            elif conf.liveTest:
-                from lib.core.testing import liveTest
-                os._exitcode = 1 - (liveTest() or 0)
             else:
                 from lib.controller.controller import start
-                if conf.profile and six.PY2:
+                if conf.profile:
                     from lib.core.profiling import profile
                     globals()["start"] = start
                     profile()
@@ -185,8 +196,10 @@ def main():
                             targets = getFileItems(conf.bulkFile)
 
                             for i in xrange(len(targets)):
+                                target = None
+
                                 try:
-                                    kb.targets.clear()
+                                    kb.targets = OrderedSet()
                                     target = targets[i]
 
                                     if not re.search(r"(?i)\Ahttp[s]*://", target):
@@ -197,7 +210,7 @@ def main():
 
                                     crawl(target)
                                 except Exception as ex:
-                                    if not isinstance(ex, SqlmapUserQuitException):
+                                    if target and not isinstance(ex, SqlmapUserQuitException):
                                         errMsg = "problem occurred while crawling '%s' ('%s')" % (target, getSafeExString(ex))
                                         logger.error(errMsg)
                                     else:
@@ -232,10 +245,15 @@ def main():
         errMsg = getSafeExString(ex)
         logger.critical(errMsg)
 
+        os._exitcode = 1
+
         raise SystemExit
 
     except KeyboardInterrupt:
-        print()
+        try:
+            print()
+        except IOError:
+            pass
 
     except EOFError:
         print()
@@ -243,8 +261,8 @@ def main():
         errMsg = "exit"
         logger.error(errMsg)
 
-    except SystemExit:
-        pass
+    except SystemExit as ex:
+        os._exitcode = ex.code or 0
 
     except:
         print()
@@ -252,32 +270,9 @@ def main():
         excMsg = traceback.format_exc()
         valid = checkIntegrity()
 
-        if valid is False:
-            errMsg = "code integrity check failed (turning off automatic issue creation). "
-            errMsg += "You should retrieve the latest development version from official GitHub "
-            errMsg += "repository at '%s'" % GIT_PAGE
-            logger.critical(errMsg)
-            print()
-            dataToStdout(excMsg)
-            raise SystemExit
+        os._exitcode = 255
 
-        elif any(_ in excMsg for _ in ("tamper/", "waf/")):
-            logger.critical(errMsg)
-            print()
-            dataToStdout(excMsg)
-            raise SystemExit
-
-        elif any(_ in excMsg for _ in ("ImportError", "ModuleNotFoundError", "Can't find file for module")):
-            errMsg = "invalid runtime environment ('%s')" % excMsg.split("Error: ")[-1].strip()
-            logger.critical(errMsg)
-            raise SystemExit
-
-        elif all(_ in excMsg for _ in ("SyntaxError: Non-ASCII character", ".py on line", "but no encoding declared")) or any(_ in excMsg for _ in ("source code string cannot contain null bytes", "No module named")):
-            errMsg = "invalid runtime environment ('%s')" % excMsg.split("Error: ")[-1].strip()
-            logger.critical(errMsg)
-            raise SystemExit
-
-        elif any(_ in excMsg for _ in ("MemoryError", "Cannot allocate memory")):
+        if any(_ in excMsg for _ in ("MemoryError", "Cannot allocate memory")):
             errMsg = "memory exhaustion detected"
             logger.critical(errMsg)
             raise SystemExit
@@ -297,15 +292,18 @@ def main():
             logger.critical(errMsg)
             raise SystemExit
 
-        elif all(_ in excMsg for _ in ("No such file", "_'")):
-            errMsg = "corrupted installation detected ('%s'). " % excMsg.strip().split('\n')[-1]
-            errMsg += "You should retrieve the latest development version from official GitHub "
-            errMsg += "repository at '%s'" % GIT_PAGE
+        elif all(_ in excMsg for _ in ("Permission denied", "metasploit")):
+            errMsg = "permission error occurred while using Metasploit"
             logger.critical(errMsg)
             raise SystemExit
 
         elif "Read-only file system" in excMsg:
             errMsg = "output device is mounted as read-only"
+            logger.critical(errMsg)
+            raise SystemExit
+
+        elif "Insufficient system resources" in excMsg:
+            errMsg = "resource exhaustion detected"
             logger.critical(errMsg)
             raise SystemExit
 
@@ -329,7 +327,7 @@ def main():
             logger.critical(errMsg)
             raise SystemExit
 
-        elif any(_ in excMsg for _ in ("tempfile.mkdtemp", "tempfile.mkstemp")):
+        elif any(_ in excMsg for _ in ("tempfile.mkdtemp", "tempfile.mkstemp", "tempfile.py")):
             errMsg = "unable to write to the temporary directory '%s'. " % tempfile.gettempdir()
             errMsg += "Please make sure that your disk is not full and "
             errMsg += "that you have sufficient write permissions to "
@@ -337,22 +335,58 @@ def main():
             logger.critical(errMsg)
             raise SystemExit
 
+        elif "Permission denied: '" in excMsg:
+            match = re.search(r"Permission denied: '([^']*)", excMsg)
+            errMsg = "permission error occurred while accessing file '%s'" % match.group(1)
+            logger.critical(errMsg)
+            raise SystemExit
+
         elif all(_ in excMsg for _ in ("twophase", "sqlalchemy")):
             errMsg = "please update the 'sqlalchemy' package (>= 1.1.11) "
-            errMsg += "(Reference: https://qiita.com/tkprof/items/7d7b2d00df9c5f16fffe)"
+            errMsg += "(Reference: 'https://qiita.com/tkprof/items/7d7b2d00df9c5f16fffe')"
+            logger.critical(errMsg)
+            raise SystemExit
+
+        elif "invalid maximum character passed to PyUnicode_New" in excMsg and re.search(r"\A3\.[34]", sys.version) is not None:
+            errMsg = "please upgrade the Python version (>= 3.5) "
+            errMsg += "(Reference: 'https://bugs.python.org/issue18183')"
             logger.critical(errMsg)
             raise SystemExit
 
         elif all(_ in excMsg for _ in ("scramble_caching_sha2", "TypeError")):
             errMsg = "please downgrade the 'PyMySQL' package (=< 0.8.1) "
-            errMsg += "(Reference: https://github.com/PyMySQL/PyMySQL/issues/700)"
+            errMsg += "(Reference: 'https://github.com/PyMySQL/PyMySQL/issues/700')"
             logger.critical(errMsg)
             raise SystemExit
 
         elif "must be pinned buffer, not bytearray" in excMsg:
             errMsg = "error occurred at Python interpreter which "
             errMsg += "is fixed in 2.7. Please update accordingly "
-            errMsg += "(Reference: https://bugs.python.org/issue8104)"
+            errMsg += "(Reference: 'https://bugs.python.org/issue8104')"
+            logger.critical(errMsg)
+            raise SystemExit
+
+        elif all(_ in excMsg for _ in ("OSError: [Errno 22] Invalid argument: '", "importlib")):
+            errMsg = "unable to read file '%s'" % extractRegexResult(r"OSError: \[Errno 22\] Invalid argument: '(?P<result>[^']+)", excMsg)
+            logger.critical(errMsg)
+            raise SystemExit
+
+        elif "hash_randomization" in excMsg:
+            errMsg = "error occurred at Python interpreter which "
+            errMsg += "is fixed in 2.7.3. Please update accordingly "
+            errMsg += "(Reference: 'https://docs.python.org/2/library/sys.html')"
+            logger.critical(errMsg)
+            raise SystemExit
+
+        elif "AttributeError: unable to access item" in excMsg and re.search(r"3\.11\.\d+a", sys.version):
+            errMsg = "there is a known issue when sqlmap is run with ALPHA versions of Python 3.11. "
+            errMsg += "Please downgrade to some stable Python version"
+            logger.critical(errMsg)
+            raise SystemExit
+
+        elif all(_ in excMsg for _ in ("Resource temporarily unavailable", "os.fork()", "dictionaryAttack")):
+            errMsg = "there has been a problem while running the multiprocessing hash cracking. "
+            errMsg += "Please rerun with option '--threads=1'"
             logger.critical(errMsg)
             raise SystemExit
 
@@ -370,6 +404,103 @@ def main():
             logger.critical(errMsg)
             raise SystemExit
 
+        elif all(_ in excMsg for _ in ("pymysql", "configparser")):
+            errMsg = "wrong initialization of 'pymsql' detected (using Python3 dependencies)"
+            logger.critical(errMsg)
+            raise SystemExit
+
+        elif all(_ in excMsg for _ in ("ntlm", "socket.error, err", "SyntaxError")):
+            errMsg = "wrong initialization of 'python-ntlm' detected (using Python2 syntax)"
+            logger.critical(errMsg)
+            raise SystemExit
+
+        elif all(_ in excMsg for _ in ("drda", "to_bytes")):
+            errMsg = "wrong initialization of 'drda' detected (using Python3 syntax)"
+            logger.critical(errMsg)
+            raise SystemExit
+
+        elif "'WebSocket' object has no attribute 'status'" in excMsg:
+            errMsg = "wrong websocket library detected"
+            errMsg += " (Reference: 'https://github.com/sqlmapproject/sqlmap/issues/4572#issuecomment-775041086')"
+            logger.critical(errMsg)
+            raise SystemExit
+
+        elif all(_ in excMsg for _ in ("window = tkinter.Tk()",)):
+            errMsg = "there has been a problem in initialization of GUI interface "
+            errMsg += "('%s')" % excMsg.strip().split('\n')[-1]
+            logger.critical(errMsg)
+            raise SystemExit
+
+        elif any(_ in excMsg for _ in ("unable to access item 'liveTest'",)):
+            errMsg = "detected usage of files from different versions of sqlmap"
+            logger.critical(errMsg)
+            raise SystemExit
+
+        elif any(_ in errMsg for _ in (": 9.9.9#",)):
+            errMsg = "LOL :)"
+            logger.critical(errMsg)
+            raise SystemExit
+
+        elif kb.get("dumpKeyboardInterrupt"):
+            raise SystemExit
+
+        elif any(_ in excMsg for _ in ("Broken pipe",)):
+            raise SystemExit
+
+        elif valid is False:
+            errMsg = "code integrity check failed (turning off automatic issue creation). "
+            errMsg += "You should retrieve the latest development version from official GitHub "
+            errMsg += "repository at '%s'" % GIT_PAGE
+            logger.critical(errMsg)
+            print()
+            dataToStdout(excMsg)
+            raise SystemExit
+
+        elif any(_ in "%s\n%s" % (errMsg, excMsg) for _ in ("tamper/", "waf/", "--engagement-dojo")):
+            logger.critical(errMsg)
+            print()
+            dataToStdout(excMsg)
+            raise SystemExit
+
+        elif any(_ in excMsg for _ in ("ImportError", "ModuleNotFoundError", "<frozen", "Can't find file for module", "SAXReaderNotAvailable", "<built-in function compile> returned NULL without setting an exception", "source code string cannot contain null bytes", "No module named", "tp_name field", "module 'sqlite3' has no attribute 'OperationalError'")):
+            errMsg = "invalid runtime environment ('%s')" % excMsg.split("Error: ")[-1].strip()
+            logger.critical(errMsg)
+            raise SystemExit
+
+        elif all(_ in excMsg for _ in ("SyntaxError: Non-ASCII character", ".py on line", "but no encoding declared")):
+            errMsg = "invalid runtime environment ('%s')" % excMsg.split("Error: ")[-1].strip()
+            logger.critical(errMsg)
+            raise SystemExit
+
+        elif all(_ in excMsg for _ in ("FileNotFoundError: [Errno 2] No such file or directory", "cwd = os.getcwd()")):
+            errMsg = "invalid runtime environment ('%s')" % excMsg.split("Error: ")[-1].strip()
+            logger.critical(errMsg)
+            raise SystemExit
+
+        elif all(_ in excMsg for _ in ("PermissionError: [WinError 5]", "multiprocessing")):
+            errMsg = "there is a permission problem in running multiprocessing on this system. "
+            errMsg += "Please rerun with '--disable-multi'"
+            logger.critical(errMsg)
+            raise SystemExit
+
+        elif all(_ in excMsg for _ in ("No such file", "_'")):
+            errMsg = "corrupted installation detected ('%s'). " % excMsg.strip().split('\n')[-1]
+            errMsg += "You should retrieve the latest development version from official GitHub "
+            errMsg += "repository at '%s'" % GIT_PAGE
+            logger.critical(errMsg)
+            raise SystemExit
+
+        elif all(_ in excMsg for _ in ("No such file", "sqlmap.conf", "Test")):
+            errMsg = "you are trying to run (hidden) development tests inside the production environment"
+            logger.critical(errMsg)
+            raise SystemExit
+
+        elif all(_ in excMsg for _ in ("HTTPNtlmAuthHandler", "'str' object has no attribute 'decode'")):
+            errMsg = "package 'python-ntlm' has a known compatibility issue with the "
+            errMsg += "Python 3 (Reference: 'https://github.com/mullender/python-ntlm/pull/61')"
+            logger.critical(errMsg)
+            raise SystemExit
+
         elif "'DictObject' object has no attribute '" in excMsg and all(_ in errMsg for _ in ("(fingerprinted)", "(identified)")):
             errMsg = "there has been a problem in enumeration. "
             errMsg += "Because of a considerable chance of false-positive case "
@@ -377,8 +508,14 @@ def main():
             logger.critical(errMsg)
             raise SystemExit
 
-        elif all(_ in excMsg for _ in ("pymysql", "configparser")):
-            errMsg = "wrong initialization of pymsql detected (using Python3 dependencies)"
+        elif "database disk image is malformed" in excMsg:
+            errMsg = "local session file seems to be malformed. Please rerun with '--flush-session'"
+            logger.critical(errMsg)
+            raise SystemExit
+
+        elif "AttributeError: 'module' object has no attribute 'F_GETFD'" in excMsg:
+            errMsg = "invalid runtime (\"%s\") " % excMsg.split("Error: ")[-1].strip()
+            errMsg += "(Reference: 'https://stackoverflow.com/a/38841364' & 'https://bugs.python.org/issue24944#msg249231')"
             logger.critical(errMsg)
             raise SystemExit
 
@@ -387,12 +524,6 @@ def main():
             errMsg = "one of your .pyc files are corrupted%s" % (" ('%s')" % match.group(1) if match else "")
             errMsg += ". Please delete .pyc files on your system to fix the problem"
             logger.critical(errMsg)
-            raise SystemExit
-
-        elif kb.get("dumpKeyboardInterrupt"):
-            raise SystemExit
-
-        elif any(_ in excMsg for _ in ("Broken pipe",)):
             raise SystemExit
 
         for match in re.finditer(r'File "(.+?)", line', excMsg):
@@ -422,10 +553,9 @@ def main():
     finally:
         kb.threadContinue = False
 
-        _ = getDaysFromLastUpdate()
-        if _ > LAST_UPDATE_NAGGING_DAYS:
-            warnMsg = "you haven't updated sqlmap for more than %d days!!!" % _
-            logger.warn(warnMsg)
+        if (getDaysFromLastUpdate() or 0) > LAST_UPDATE_NAGGING_DAYS:
+            warnMsg = "your sqlmap version is outdated"
+            logger.warning(warnMsg)
 
         if conf.get("showTime"):
             dataToStdout("\n[*] ending @ %s\n\n" % time.strftime("%X /%Y-%m-%d/"), forceOutput=True)
@@ -448,6 +578,7 @@ def main():
 
         if conf.get("hashDB"):
             conf.hashDB.flush(True)
+            conf.hashDB.close()         # NOTE: because of PyPy
 
         if conf.get("harFile"):
             try:
@@ -465,7 +596,7 @@ def main():
 
         # short delay for thread finalization
         _ = time.time()
-        while threading.activeCount() > 1 and (time.time() - _) > THREAD_FINALIZATION_TIMEOUT:
+        while threading.active_count() > 1 and (time.time() - _) > THREAD_FINALIZATION_TIMEOUT:
             time.sleep(0.01)
 
         if cmdLineOptions.get("sqlmapShell"):
@@ -486,10 +617,10 @@ if __name__ == "__main__":
         traceback.print_exc()
     finally:
         # Reference: http://stackoverflow.com/questions/1635080/terminate-a-multi-thread-python-program
-        if threading.activeCount() > 1:
+        if threading.active_count() > 1:
             os._exit(getattr(os, "_exitcode", 0))
         else:
             sys.exit(getattr(os, "_exitcode", 0))
 else:
-    # cancelling postponed imports (because of Travis CI checks)
-    from lib.controller.controller import start
+    # cancelling postponed imports (because of CI/CD checks)
+    __import__("lib.controller.controller")

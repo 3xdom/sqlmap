@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -80,6 +80,7 @@ def _oneShotErrorUse(expression, field=None, chunkTest=False):
         debugMsg = "searching for error chunk length..."
         logger.debug(debugMsg)
 
+        seen = set()
         current = MAX_ERROR_CHUNK_LENGTH
         while current >= MIN_ERROR_CHUNK_LENGTH:
             testChar = str(current % 10)
@@ -91,6 +92,7 @@ def _oneShotErrorUse(expression, field=None, chunkTest=False):
                 testQuery = "SELECT %s" % (agent.hexConvertField(testQuery) if conf.hexConvert else testQuery)
 
             result = unArrayizeValue(_oneShotErrorUse(testQuery, chunkTest=True))
+            seen.add(current)
 
             if (result or "").startswith(testChar):
                 if result == testChar * current:
@@ -99,7 +101,7 @@ def _oneShotErrorUse(expression, field=None, chunkTest=False):
                 else:
                     result = re.search(r"\A\w+", result).group(0)
                     candidate = len(result) - len(kb.chars.stop)
-                    current = candidate if candidate != current else current - 1
+                    current = candidate if candidate != current and candidate not in seen else current - 1
             else:
                 current = current // 2
 
@@ -165,7 +167,7 @@ def _oneShotErrorUse(expression, field=None, chunkTest=False):
                             warnMsg = "possible server trimmed output detected "
                             warnMsg += "(due to its length and/or content): "
                             warnMsg += safecharencode(trimmed)
-                            logger.warn(warnMsg)
+                            logger.warning(warnMsg)
 
                         if not kb.testMode:
                             check = r"(?P<result>[^<>\n]*?)%s" % kb.chars.stop[:2]
@@ -340,16 +342,16 @@ def errorUse(expression, dump=False):
                 else:
                     stopLimit = int(count)
 
-                    infoMsg = "used SQL query returns "
-                    infoMsg += "%d %s" % (stopLimit, "entries" if stopLimit > 1 else "entry")
-                    logger.info(infoMsg)
+                    debugMsg = "used SQL query returns "
+                    debugMsg += "%d %s" % (stopLimit, "entries" if stopLimit > 1 else "entry")
+                    logger.debug(debugMsg)
 
             elif count and not count.isdigit():
                 warnMsg = "it was not possible to count the number "
                 warnMsg += "of entries for the SQL query provided. "
                 warnMsg += "sqlmap will assume that it returns only "
                 warnMsg += "one entry"
-                logger.warn(warnMsg)
+                logger.warning(warnMsg)
 
                 stopLimit = 1
 
@@ -357,7 +359,7 @@ def errorUse(expression, dump=False):
                 if not count:
                     warnMsg = "the SQL query provided does not "
                     warnMsg += "return any output"
-                    logger.warn(warnMsg)
+                    logger.warning(warnMsg)
                 else:
                     value = []  # for empty tables
                 return value
@@ -443,7 +445,7 @@ def errorUse(expression, dump=False):
                     abortedFlag = True
                     warnMsg = "user aborted during enumeration. sqlmap "
                     warnMsg += "will display partial output"
-                    logger.warn(warnMsg)
+                    logger.warning(warnMsg)
 
                 finally:
                     threadData.shared.value.extend(_[1] for _ in sorted(threadData.shared.buffered))
@@ -462,7 +464,7 @@ def errorUse(expression, dump=False):
     duration = calculateDeltaSeconds(start)
 
     if not kb.bruteMode:
-        debugMsg = "performed %d queries in %.2f seconds" % (kb.counters[getTechnique()], duration)
+        debugMsg = "performed %d quer%s in %.2f seconds" % (kb.counters[getTechnique()], 'y' if kb.counters[getTechnique()] == 1 else "ies", duration)
         logger.debug(debugMsg)
 
     return value

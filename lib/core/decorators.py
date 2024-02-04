@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -25,10 +25,12 @@ def cachedmethod(f):
     >>> __ = cachedmethod(lambda _: _)
     >>> __(1)
     1
+    >>> __(1)
+    1
     >>> __ = cachedmethod(lambda *args, **kwargs: args[0])
     >>> __(2)
     2
-    >>> __ = cachedmethod(lambda *args, **kwargs: list(kwargs.values())[0])
+    >>> __ = cachedmethod(lambda *args, **kwargs: next(iter(kwargs.values())))
     >>> __(foobar=3)
     3
 
@@ -39,16 +41,19 @@ def cachedmethod(f):
 
     @functools.wraps(f)
     def _f(*args, **kwargs):
-        key = int(hashlib.md5("|".join(str(_) for _ in (f, args, kwargs)).encode(UNICODE_ENCODING)).hexdigest(), 16) & 0x7fffffffffffffff
-
         try:
-            with _cache_lock:
-                result = _cache[f][key]
-        except KeyError:
+            key = int(hashlib.md5("|".join(str(_) for _ in (f, args, kwargs)).encode(UNICODE_ENCODING)).hexdigest(), 16) & 0x7fffffffffffffff
+        except ValueError:  # https://github.com/sqlmapproject/sqlmap/issues/4281 (NOTE: non-standard Python behavior where hexdigest returns binary value)
             result = f(*args, **kwargs)
+        else:
+            try:
+                with _cache_lock:
+                    result = _cache[f][key]
+            except KeyError:
+                result = f(*args, **kwargs)
 
-            with _cache_lock:
-                _cache[f][key] = result
+                with _cache_lock:
+                    _cache[f][key] = result
 
         return result
 

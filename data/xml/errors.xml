@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <root>
-    <!-- MySQL -->
     <dbms value="MySQL">
         <error regexp="SQL syntax.*?MySQL"/>
         <error regexp="Warning.*?\Wmysqli?_"/>
         <error regexp="MySQLSyntaxErrorException"/>
         <error regexp="valid MySQL result"/>
-        <error regexp="check the manual that (corresponds to|fits) your (MySQL|MariaDB) server version"/>
+        <error regexp="check the manual that (corresponds to|fits) your MySQL server version"/>
+        <error regexp="check the manual that (corresponds to|fits) your MariaDB server version" fork="MariaDB"/>
+        <error regexp="check the manual that (corresponds to|fits) your Drizzle server version" fork="Drizzle"/>
         <error regexp="Unknown column '[^ ]+' in 'field list'"/>
         <error regexp="MySqlClient\."/>
         <error regexp="com\.mysql\.jdbc"/>
@@ -15,9 +16,11 @@
         <error regexp="Pdo[./_\\]Mysql"/>
         <error regexp="MySqlException"/>
         <error regexp="SQLSTATE\[\d+\]: Syntax error or access violation"/>
+        <error regexp="MemSQL does not support this type of query" fork="MemSQL"/>
+        <error regexp="is not supported by MemSQL" fork="MemSQL"/>
+        <error regexp="unsupported nested scalar subselect" fork="MemSQL"/>
     </dbms>
 
-    <!-- PostgreSQL -->
     <dbms value="PostgreSQL">
         <error regexp="PostgreSQL.*?ERROR"/>
         <error regexp="Warning.*?\Wpg_"/>
@@ -33,14 +36,13 @@
         <error regexp="PSQLException"/>
     </dbms>
 
-    <!-- Microsoft SQL Server -->
     <dbms value="Microsoft SQL Server">
         <error regexp="Driver.*? SQL[\-\_\ ]*Server"/>
         <error regexp="OLE DB.*? SQL Server"/>
         <error regexp="\bSQL Server[^&lt;&quot;]+Driver"/>
         <error regexp="Warning.*?\W(mssql|sqlsrv)_"/>
         <error regexp="\bSQL Server[^&lt;&quot;]+[0-9a-fA-F]{8}"/>
-        <error regexp="System\.Data\.SqlClient\.SqlException"/>
+        <error regexp="System\.Data\.SqlClient\.(SqlException|SqlConnection\.OnError)"/>
         <error regexp="(?s)Exception.*?\bRoadhouse\.Cms\."/>
         <error regexp="Microsoft SQL Native Client error '[0-9a-fA-F]{8}"/>
         <error regexp="\[SQL Server\]"/>
@@ -53,9 +55,9 @@
         <error regexp="com\.microsoft\.sqlserver\.jdbc"/>
         <error regexp="Pdo[./_\\](Mssql|SqlSrv)"/>
         <error regexp="SQL(Srv|Server)Exception"/>
+        <error regexp="Unclosed quotation mark after the character string"/>
     </dbms>
 
-    <!-- Microsoft Access -->
     <dbms value="Microsoft Access">
         <error regexp="Microsoft Access (\d+ )?Driver"/>
         <error regexp="JET Database Engine"/>
@@ -64,7 +66,6 @@
         <error regexp="Syntax error \(missing operator\) in query expression"/>
     </dbms>
 
-    <!-- Oracle -->
     <dbms value="Oracle">
         <error regexp="\bORA-\d{5}"/>
         <error regexp="Oracle error"/>
@@ -79,19 +80,18 @@
         <error regexp="OracleException"/>
     </dbms>
 
-    <!-- IBM DB2 -->
     <dbms value="IBM DB2">
         <error regexp="CLI Driver.*?DB2"/>
         <error regexp="DB2 SQL error"/>
         <error regexp="\bdb2_\w+\("/>
-        <error regexp="SQLSTATE.+SQLCODE"/>
+        <error regexp="SQLCODE[=:\d, -]+SQLSTATE"/>
         <error regexp="com\.ibm\.db2\.jcc"/>
         <error regexp="Zend_Db_(Adapter|Statement)_Db2_Exception"/>
         <error regexp="Pdo[./_\\]Ibm"/>
         <error regexp="DB2Exception"/>
+        <error regexp="ibm_db_dbi\.ProgrammingError"/>
     </dbms>
 
-    <!-- Informix -->
     <dbms value="Informix">
         <error regexp="Warning.*?\Wifx_"/>
         <error regexp="Exception.*?Informix"/>
@@ -111,7 +111,6 @@
         <error regexp="Pdo[./_\\]Firebird"/>
     </dbms>
 
-    <!-- SQLite -->
     <dbms value="SQLite">
         <error regexp="SQLite/JDBCDriver"/>
         <error regexp="SQLite\.Exception"/>
@@ -126,15 +125,15 @@
         <error regexp="SQLiteException"/>
     </dbms>
 
-    <!-- SAP MaxDB -->
     <dbms value="SAP MaxDB">
         <error regexp="SQL error.*?POS([0-9]+)"/>
         <error regexp="Warning.*?\Wmaxdb_"/>
         <error regexp="DriverSapDB"/>
+        <error regexp="-3014.*?Invalid end of SQL statement"/>
         <error regexp="com\.sap\.dbtech\.jdbc"/>
+        <error regexp="\[-3008\].*?: Invalid keyword or missing delimiter"/>
     </dbms>
 
-    <!-- Sybase -->
     <dbms value="Sybase">
         <error regexp="Warning.*?\Wsybase_"/>
         <error regexp="Sybase message"/>
@@ -144,7 +143,6 @@
         <error regexp="com\.sybase\.jdbc"/>
     </dbms>
 
-    <!-- Ingres -->
     <dbms value="Ingres">
         <error regexp="Warning.*?\Wingres_"/>
         <error regexp="Ingres SQLSTATE"/>
@@ -152,21 +150,91 @@
         <error regexp="com\.ingres\.gcf\.jdbc"/>
     </dbms>
 
-    <!-- Frontbase -->
-    <dbms value="Frontbase">
+    <dbms value="FrontBase">
         <error regexp="Exception (condition )?\d+\. Transaction rollback"/>
         <error regexp="com\.frontbase\.jdbc"/>
+        <error regexp="Syntax error 1. Missing"/>
+        <error regexp="(Semantic|Syntax) error [1-4]\d{2}\."/>
     </dbms>
 
-    <!-- HSQLDB -->
     <dbms value="HSQLDB">
         <error regexp="Unexpected end of command in statement \["/>
         <error regexp="Unexpected token.*?in statement \["/>
         <error regexp="org\.hsqldb\.jdbc"/>
     </dbms>
 
-    <!-- H2 -->
     <dbms value="H2">
         <error regexp="org\.h2\.jdbc"/>
+        <error regexp="\[42000-192\]"/>
+    </dbms>
+
+    <dbms value="MonetDB">
+        <error regexp="![0-9]{5}![^\n]+(failed|unexpected|error|syntax|expected|violation|exception)"/>
+        <error regexp="\[MonetDB\]\[ODBC Driver"/>
+        <error regexp="nl\.cwi\.monetdb\.jdbc"/>
+    </dbms>
+
+    <dbms value="Apache Derby">
+        <error regexp="Syntax error: Encountered"/>
+        <error regexp="org\.apache\.derby"/>
+        <error regexp="ERROR 42X01"/>
+    </dbms>
+
+    <dbms value="Vertica">
+        <error regexp=", Sqlstate: (3F|42).{3}, (Routine|Hint|Position):"/>
+        <error regexp="/vertica/Parser/scan"/>
+        <error regexp="com\.vertica\.jdbc"/>
+        <error regexp="org\.jkiss\.dbeaver\.ext\.vertica"/>
+        <error regexp="com\.vertica\.dsi\.dataengine"/>
+    </dbms>
+
+    <dbms value="Mckoi">
+        <error regexp="com\.mckoi\.JDBCDriver"/>
+        <error regexp="com\.mckoi\.database\.jdbc"/>
+        <error regexp="&lt;REGEX_LITERAL&gt;"/>
+    </dbms>
+
+    <dbms value="Presto">
+        <error regexp="com\.facebook\.presto\.jdbc"/>
+        <error regexp="io\.prestosql\.jdbc"/>
+        <error regexp="com\.simba\.presto\.jdbc"/>
+        <error regexp="UNION query has different number of fields: \d+, \d+"/>
+        <error regexp="line \d+:\d+: mismatched input '[^']+'. Expecting:"/>
+    </dbms>
+
+    <dbms value="Altibase">
+        <error regexp="Altibase\.jdbc\.driver"/>
+    </dbms>
+
+    <dbms value="MimerSQL">
+        <error regexp="com\.mimer\.jdbc"/>
+        <error regexp="Syntax error,[^\n]+assumed to mean"/>
+    </dbms>
+
+    <dbms value="ClickHouse">
+        <error regexp="Code: \d+. DB::Exception:"/>
+        <error regexp="Syntax error: failed at position \d+"/>
+    </dbms>
+
+    <dbms value="CrateDB">
+        <error regexp="io\.crate\.client\.jdbc"/>
+    </dbms>
+
+    <dbms value="Cache">
+        <error regexp="encountered after end of query"/>
+        <error regexp="A comparison operator is required here"/>
+    </dbms>
+
+    <dbms value="Raima Database Manager">
+        <error regexp="-10048: Syntax error"/>
+        <error regexp="rdmStmtPrepare\(.+?\) returned"/>
+    </dbms>
+
+    <dbms value="Virtuoso">
+        <error regexp="SQ074: Line \d+:"/>
+        <error regexp="SR185: Undefined procedure"/>
+        <error regexp="SQ200: No table "/>
+        <error regexp="Virtuoso S0002 Error"/>
+        <error regexp="\[(Virtuoso Driver|Virtuoso iODBC Driver)\]\[Virtuoso Server\]"/>
     </dbms>
 </root>

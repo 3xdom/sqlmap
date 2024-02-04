@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
+import re
 import time
 
 from lib.core.agent import agent
@@ -43,15 +44,22 @@ def direct(query, content=True):
                 select = False
                 break
 
-    if select and not query.upper().startswith("SELECT "):
-        query = "SELECT %s" % query
+    if select:
+        if re.search(r"(?i)\ASELECT ", query) is None:
+            query = "SELECT %s" % query
+
+        if conf.binaryFields:
+            for field in conf.binaryFields:
+                field = field.strip()
+                if re.search(r"\b%s\b" % re.escape(field), query):
+                    query = re.sub(r"\b%s\b" % re.escape(field), agent.hexConvertField(field), query)
 
     logger.log(CUSTOM_LOGGING.PAYLOAD, query)
 
     output = hashDBRetrieve(query, True, True)
     start = time.time()
 
-    if not select and "EXEC " not in query.upper():
+    if not select and re.search(r"(?i)\bEXEC ", query) is None:
         timeout(func=conf.dbmsConnector.execute, args=(query,), duration=conf.timeout, default=None)
     elif not (output and ("%soutput" % conf.tablePrefix) not in query and ("%sfile" % conf.tablePrefix) not in query):
         output, state = timeout(func=conf.dbmsConnector.select, args=(query,), duration=conf.timeout, default=None)

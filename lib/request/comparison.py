@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -13,6 +13,7 @@ from lib.core.common import extractRegexResult
 from lib.core.common import getFilteredPageContent
 from lib.core.common import listToStrValue
 from lib.core.common import removeDynamicContent
+from lib.core.common import getLastRequestHTTPError
 from lib.core.common import wasLastResponseDBMSError
 from lib.core.common import wasLastResponseHTTPError
 from lib.core.convert import getBytes
@@ -63,13 +64,19 @@ def _comparison(page, headers, code, getRatioValue, pageLength):
     if any((conf.string, conf.notString, conf.regexp)):
         rawResponse = "%s%s" % (listToStrValue(_ for _ in headers.headers if not _.startswith("%s:" % URI_HTTP_HEADER)) if headers else "", page)
 
-        # String to match in page when the query is True and/or valid
+        # String to match in page when the query is True
         if conf.string:
             return conf.string in rawResponse
 
-        # String to match in page when the query is False and/or invalid
+        # String to match in page when the query is False
         if conf.notString:
-            return conf.notString not in rawResponse
+            if conf.notString in rawResponse:
+                return False
+            else:
+                if kb.errorIsNone and (wasLastResponseDBMSError() or wasLastResponseHTTPError()):
+                    return None
+                else:
+                    return True
 
         # Regular expression to match in page when the query is True and/or valid
         if conf.regexp:
@@ -85,7 +92,8 @@ def _comparison(page, headers, code, getRatioValue, pageLength):
     if page:
         # In case of an DBMS error page return None
         if kb.errorIsNone and (wasLastResponseDBMSError() or wasLastResponseHTTPError()) and not kb.negativeLogic:
-            return None
+            if not (wasLastResponseHTTPError() and getLastRequestHTTPError() in (conf.ignoreCode or [])):
+                return None
 
         # Dynamic content lines to be excluded before comparison
         if not kb.nullConnection:
@@ -145,10 +153,20 @@ def _comparison(page, headers, code, getRatioValue, pageLength):
                 seq1 = seq1.split("\n")
                 seq2 = seq2.split("\n")
 
+                key = None
+            else:
+                key = (hash(seq1), hash(seq2))
+
             seqMatcher.set_seq1(seq1)
             seqMatcher.set_seq2(seq2)
 
-            ratio = round(seqMatcher.quick_ratio() if not kb.heavilyDynamic else seqMatcher.ratio(), 3)
+            if key in kb.cache.comparison:
+                ratio = kb.cache.comparison[key]
+            else:
+                ratio = round(seqMatcher.quick_ratio() if not kb.heavilyDynamic else seqMatcher.ratio(), 3)
+
+            if key:
+                kb.cache.comparison[key] = ratio
 
     # If the url is stable and we did not set yet the match ratio and the
     # current injected value changes the url page content

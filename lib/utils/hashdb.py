@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -33,6 +33,7 @@ class HashDB(object):
         self.filepath = filepath
         self._write_cache = {}
         self._cache_lock = threading.Lock()
+        self._connections = []
 
     def _get_cursor(self):
         threadData = getCurrentThreadData()
@@ -40,6 +41,7 @@ class HashDB(object):
         if threadData.hashDBCursor is None:
             try:
                 connection = sqlite3.connect(self.filepath, timeout=3, isolation_level=None)
+                self._connections.append(connection)
                 threadData.hashDBCursor = connection.cursor()
                 threadData.hashDBCursor.execute("CREATE TABLE IF NOT EXISTS storage (id INTEGER PRIMARY KEY, value TEXT)")
                 connection.commit()
@@ -60,15 +62,24 @@ class HashDB(object):
         threadData = getCurrentThreadData()
         try:
             if threadData.hashDBCursor:
+                threadData.hashDBCursor.connection.commit()
                 threadData.hashDBCursor.close()
                 threadData.hashDBCursor.connection.close()
                 threadData.hashDBCursor = None
         except:
             pass
 
+    def closeAll(self):
+        for connection in self._connections:
+            try:
+                connection.commit()
+                connection.close()
+            except:
+                pass
+
     @staticmethod
     def hashKey(key):
-        key = getBytes(key if isinstance(key, six.text_type) else repr(key))
+        key = getBytes(key if isinstance(key, six.text_type) else repr(key), errors="xmlcharrefreplace")
         retVal = int(hashlib.md5(key).hexdigest(), 16) & 0x7fffffffffffffff  # Reference: http://stackoverflow.com/a/4448400
         return retVal
 
@@ -105,7 +116,7 @@ class HashDB(object):
                 retVal = None
                 warnMsg = "error occurred while unserializing value for session key '%s'. " % key
                 warnMsg += "If the problem persists please rerun with '--flush-session'"
-                logger.warn(warnMsg)
+                logger.warning(warnMsg)
 
         return retVal
 
@@ -116,7 +127,7 @@ class HashDB(object):
             self._write_cache[hash_] = getUnicode(value) if not serialize else serializeObject(value)
             self._cache_lock.release()
 
-        if getCurrentThreadName() in ('0', 'MainThread'):
+        if getCurrentThreadName() in ('0', "MainThread"):
             self.flush()
 
     def flush(self, forced=False):
@@ -141,7 +152,7 @@ class HashDB(object):
                             self.cursor.execute("INSERT INTO storage VALUES (?, ?)", (hash_, value,))
                         except sqlite3.IntegrityError:
                             self.cursor.execute("UPDATE storage SET value=? WHERE id=?", (value, hash_,))
-                    except UnicodeError:  # e.g. surrogates not allowed (Issue #3851)
+                    except (UnicodeError, OverflowError):  # e.g. surrogates not allowed (Issue #3851)
                         break
                     except sqlite3.DatabaseError as ex:
                         if not os.path.exists(self.filepath):
@@ -152,7 +163,7 @@ class HashDB(object):
                         if retries == 0:
                             warnMsg = "there has been a problem while writing to "
                             warnMsg += "the session file ('%s')" % getSafeExString(ex)
-                            logger.warn(warnMsg)
+                            logger.warning(warnMsg)
 
                         if retries >= HASHDB_FLUSH_RETRIES:
                             return
@@ -187,6 +198,10 @@ class HashDB(object):
                     threadData.inTransaction = False
                 except sqlite3.OperationalError:
                     pass
+                except sqlite3.ProgrammingError:
+                    self.cursor = None
+                    threadData.inTransaction = False
+                    return
                 else:
                     return
 

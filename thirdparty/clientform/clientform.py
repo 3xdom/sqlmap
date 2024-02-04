@@ -237,9 +237,9 @@ def unescape(data, entities, encoding=DEFAULT_ENCODING):
 
         repl = entities.get(ent)
         if repl is not None:
-            if type(repl) != type("") and encoding is not None:
+            if hasattr(repl, "decode") and encoding is not None:
                 try:
-                    repl = repl.encode(encoding)
+                    repl = repl.decode(encoding)
                 except UnicodeError:
                     repl = ent
         else:
@@ -255,15 +255,11 @@ def unescape_charref(data, encoding):
         name, base= name[1:], 16
     elif not name.isdigit():
         base = 16
-    uc = _unichr(int(name, base))
-    if encoding is None:
-        return uc
-    else:
-        try:
-            repl = uc.encode(encoding)
-        except UnicodeError:
-            repl = "&#%s;" % data
-        return repl
+
+    try:
+        return _unichr(int(name, base))
+    except:
+        return data
 
 def get_entitydefs():
     from codecs import latin_1_decode
@@ -713,7 +709,7 @@ class _AbstractFormParser:
                 data = data[1:]
             map[key] = data
         else:
-            map[key] = (map[key].decode("utf8") if isinstance(map[key], six.binary_type) else map[key]) + data
+            map[key] = (map[key].decode("utf8", "replace") if isinstance(map[key], six.binary_type) else map[key]) + data
 
     def do_button(self, attrs):
         debug("%s", attrs)
@@ -1934,7 +1930,7 @@ class ListControl(Control):
             raise AttributeError("control '%s' is disabled" % self.name)
         if self.readonly:
             raise AttributeError("control '%s' is readonly" % self.name)
-        action == bool(action)
+        action = bool(action)
         compat = self._form.backwards_compat
         if not compat and item.disabled:
             raise AttributeError("item is disabled")

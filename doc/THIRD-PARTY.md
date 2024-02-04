@@ -48,14 +48,10 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 * The `Chardet` library located under `thirdparty/chardet/`.
   Copyright (C) 2008, Mark Pilgrim.
-* The `Gprof2dot` library located under `thirdparty/gprof2dot/`.
-  Copyright (C) 2008-2009, Jose Fonseca.
 * The `KeepAlive` library located under `thirdparty/keepalive/`.
   Copyright (C) 2002-2003, Michael D. Stenner.
 * The `MultipartPost` library located under `thirdparty/multipart/`.
   Copyright (C) 2006, Will Holcomb.
-* The `XDot` library located under `thirdparty/xdot/`
-  Copyright (C) 2008, Jose Fonseca.
 * The `icmpsh` tool located under `extra/icmpsh/`.
   Copyright (C) 2010, Nico Leidecker, Bernardo Damele.
 
@@ -277,7 +273,7 @@ be bound by the terms and conditions of this License Agreement.
 * The `bottle` web framework library located under `thirdparty/bottle/`.
   Copyright (C) 2012, Marcel Hellkamp.
 * The `identYwaf` library located under `thirdparty/identywaf/`.
-  Copyright (C) 2019, Miroslav Stampar.
+  Copyright (C) 2019-2020, Miroslav Stampar.
 * The `ordereddict` library located under `thirdparty/odict/`.
   Copyright (C) 2009, Raymond Hettinger.
 * The `six` Python 2 and 3 compatibility library located under `thirdparty/six/`.

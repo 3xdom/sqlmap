@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -19,7 +19,9 @@ from lib.core.data import conf
 from lib.core.data import logger
 from lib.core.dicts import SQL_STATEMENTS
 from lib.core.enums import AUTOCOMPLETE_TYPE
+from lib.core.enums import DBMS
 from lib.core.exception import SqlmapNoneDataException
+from lib.core.settings import METADB_SUFFIX
 from lib.core.settings import NULL
 from lib.core.settings import PARAMETER_SPLITTING_REGEX
 from lib.core.shell import autoCompletion
@@ -46,9 +48,16 @@ class Custom(object):
                         sqlType = sqlTitle
                         break
 
-            if not any(_ in query.upper() for _ in ("OPENROWSET", "INTO")) and (not sqlType or "SELECT" in sqlType):
+            if not re.search(r"\b(OPENROWSET|INTO)\b", query, re.I) and (not sqlType or "SELECT" in sqlType):
                 infoMsg = "fetching %s query output: '%s'" % (sqlType if sqlType is not None else "SQL", query)
                 logger.info(infoMsg)
+
+                if Backend.isDbms(DBMS.MSSQL):
+                    match = re.search(r"(\bFROM\s+)([^\s]+)", query, re.I)
+                    if match and match.group(2).count('.') == 1:
+                        query = query.replace(match.group(0), "%s%s" % (match.group(1), match.group(2).replace('.', ".dbo.")))
+
+                query = re.sub(r"(?i)\w+%s\.?" % METADB_SUFFIX, "", query)
 
                 output = inject.getValue(query, fromUser=True)
 
@@ -56,25 +65,22 @@ class Custom(object):
             elif not isStackingAvailable() and not conf.direct:
                 warnMsg = "execution of non-query SQL statements is only "
                 warnMsg += "available when stacked queries are supported"
-                logger.warn(warnMsg)
+                logger.warning(warnMsg)
 
                 return None
             else:
                 if sqlType:
-                    debugMsg = "executing %s query: '%s'" % (sqlType if sqlType is not None else "SQL", query)
+                    infoMsg = "executing %s statement: '%s'" % (sqlType if sqlType is not None else "SQL", query)
                 else:
-                    debugMsg = "executing unknown SQL type query: '%s'" % query
-                logger.debug(debugMsg)
+                    infoMsg = "executing unknown SQL command: '%s'" % query
+                logger.info(infoMsg)
 
                 inject.goStacked(query)
-
-                debugMsg = "done"
-                logger.debug(debugMsg)
 
                 output = NULL
 
         except SqlmapNoneDataException as ex:
-            logger.warn(ex)
+            logger.warning(ex)
 
         return output
 

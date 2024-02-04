@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -36,10 +36,12 @@ from lib.core.dicts import PGSQL_PRIVS
 from lib.core.enums import CHARSET_TYPE
 from lib.core.enums import DBMS
 from lib.core.enums import EXPECTED
+from lib.core.enums import FORK
 from lib.core.enums import PAYLOAD
 from lib.core.exception import SqlmapNoneDataException
 from lib.core.exception import SqlmapUserQuitException
 from lib.core.settings import CURRENT_USER
+from lib.core.settings import PLUS_ONE_DBMSES
 from lib.core.threads import getCurrentThreadData
 from lib.request import inject
 from lib.utils.hash import attackCachedUsersPasswords
@@ -75,16 +77,22 @@ class Users(object):
         infoMsg = "testing if current user is DBA"
         logger.info(infoMsg)
 
+        query = None
+
         if Backend.isDbms(DBMS.MYSQL):
             self.getCurrentUser()
-            query = queries[Backend.getIdentifiedDbms()].is_dba.query % (kb.data.currentUser.split("@")[0] if kb.data.currentUser else None)
+            if Backend.isDbms(DBMS.MYSQL) and Backend.isFork(FORK.DRIZZLE):
+                kb.data.isDba = "root" in (kb.data.currentUser or "")
+            elif kb.data.currentUser:
+                query = queries[Backend.getIdentifiedDbms()].is_dba.query % kb.data.currentUser.split("@")[0]
         elif Backend.getIdentifiedDbms() in (DBMS.MSSQL, DBMS.SYBASE) and user is not None:
             query = queries[Backend.getIdentifiedDbms()].is_dba.query2 % user
         else:
             query = queries[Backend.getIdentifiedDbms()].is_dba.query
 
-        query = agent.forgeCaseStatement(query)
-        kb.data.isDba = inject.checkBooleanExpression(query) or False
+        if query:
+            query = agent.forgeCaseStatement(query)
+            kb.data.isDba = inject.checkBooleanExpression(query) or False
 
         return kb.data.isDba
 
@@ -98,10 +106,13 @@ class Users(object):
         condition |= (Backend.isDbms(DBMS.MYSQL) and not kb.data.has_information_schema)
 
         if any(isTechniqueAvailable(_) for _ in (PAYLOAD.TECHNIQUE.UNION, PAYLOAD.TECHNIQUE.ERROR, PAYLOAD.TECHNIQUE.QUERY)) or conf.direct:
-            if condition:
+            if Backend.isDbms(DBMS.MYSQL) and Backend.isFork(FORK.DRIZZLE):
+                query = rootQuery.inband.query3
+            elif condition:
                 query = rootQuery.inband.query2
             else:
                 query = rootQuery.inband.query
+
             values = inject.getValue(query, blind=False, time=False)
 
             if not isNoneValue(values):
@@ -115,7 +126,9 @@ class Users(object):
             infoMsg = "fetching number of database users"
             logger.info(infoMsg)
 
-            if condition:
+            if Backend.isDbms(DBMS.MYSQL) and Backend.isFork(FORK.DRIZZLE):
+                query = rootQuery.blind.count3
+            elif condition:
                 query = rootQuery.blind.count2
             else:
                 query = rootQuery.blind.count
@@ -128,16 +141,19 @@ class Users(object):
                 errMsg = "unable to retrieve the number of database users"
                 raise SqlmapNoneDataException(errMsg)
 
-            plusOne = Backend.getIdentifiedDbms() in (DBMS.ORACLE, DBMS.DB2)
+            plusOne = Backend.getIdentifiedDbms() in PLUS_ONE_DBMSES
             indexRange = getLimitRange(count, plusOne=plusOne)
 
             for index in indexRange:
                 if Backend.getIdentifiedDbms() in (DBMS.SYBASE, DBMS.MAXDB):
                     query = rootQuery.blind.query % (kb.data.cachedUsers[-1] if kb.data.cachedUsers else " ")
+                elif Backend.isDbms(DBMS.MYSQL) and Backend.isFork(FORK.DRIZZLE):
+                    query = rootQuery.blind.query3 % index
                 elif condition:
                     query = rootQuery.blind.query2 % index
                 else:
                     query = rootQuery.blind.query % index
+
                 user = unArrayizeValue(inject.getValue(query, union=False, error=False))
 
                 if user:
@@ -260,7 +276,7 @@ class Users(object):
                     if user in retrievedUsers:
                         continue
 
-                    if Backend.isDbms(DBMS.INFORMIX):
+                    if Backend.getIdentifiedDbms() in (DBMS.INFORMIX, DBMS.VIRTUOSO):
                         count = 1
                     else:
                         infoMsg = "fetching number of password hashes "
@@ -285,7 +301,7 @@ class Users(object):
                         if not isNumPosStrValue(count):
                             warnMsg = "unable to retrieve the number of password "
                             warnMsg += "hashes for user '%s'" % user
-                            logger.warn(warnMsg)
+                            logger.warning(warnMsg)
                             continue
 
                     infoMsg = "fetching password hashes for user '%s'" % user
@@ -293,7 +309,7 @@ class Users(object):
 
                     passwords = []
 
-                    plusOne = Backend.getIdentifiedDbms() in (DBMS.ORACLE, DBMS.DB2)
+                    plusOne = Backend.getIdentifiedDbms() in PLUS_ONE_DBMSES
                     indexRange = getLimitRange(count, plusOne=plusOne)
 
                     for index in indexRange:
@@ -306,7 +322,7 @@ class Users(object):
                             if fallback:
                                 query = query.replace("master.dbo.fn_varbintohexstr", "sys.fn_sqlvarbasetostr")
 
-                        elif Backend.isDbms(DBMS.INFORMIX):
+                        elif Backend.getIdentifiedDbms() in (DBMS.INFORMIX, DBMS.VIRTUOSO):
                             query = rootQuery.blind.query % (user,)
 
                         elif Backend.isDbms(DBMS.HSQLDB):
@@ -329,15 +345,13 @@ class Users(object):
                     else:
                         warnMsg = "unable to retrieve the password "
                         warnMsg += "hashes for user '%s'" % user
-                        logger.warn(warnMsg)
+                        logger.warning(warnMsg)
 
                     retrievedUsers.add(user)
 
         if not kb.data.cachedUsersPasswords:
             errMsg = "unable to retrieve the password hashes for the "
-            errMsg += "database users (probably because the DBMS "
-            errMsg += "current user has no read privileges over the relevant "
-            errMsg += "system database table(s))"
+            errMsg += "database users"
             logger.error(errMsg)
         else:
             for user in kb.data.cachedUsersPasswords:
@@ -436,12 +450,12 @@ class Users(object):
                             # In PostgreSQL we get 1 if the privilege is
                             # True, 0 otherwise
                             if Backend.isDbms(DBMS.PGSQL) and getUnicode(privilege).isdigit():
-                                if int(privilege) == 1:
+                                if int(privilege) == 1 and count in PGSQL_PRIVS:
                                     privileges.add(PGSQL_PRIVS[count])
 
                             # In MySQL >= 5.0 and Oracle we get the list
                             # of privileges as string
-                            elif Backend.isDbms(DBMS.ORACLE) or (Backend.isDbms(DBMS.MYSQL) and kb.data.has_information_schema):
+                            elif Backend.isDbms(DBMS.ORACLE) or (Backend.isDbms(DBMS.MYSQL) and kb.data.has_information_schema) or Backend.getIdentifiedDbms() in (DBMS.VERTICA, DBMS.MIMERSQL, DBMS.CUBRID):
                                 privileges.add(privilege)
 
                             # In MySQL < 5.0 we get Y if the privilege is
@@ -533,7 +547,7 @@ class Users(object):
 
                         warnMsg = "unable to retrieve the number of "
                         warnMsg += "privileges for user '%s'" % outuser
-                        logger.warn(warnMsg)
+                        logger.warning(warnMsg)
                         continue
 
                 infoMsg = "fetching privileges for user '%s'" % outuser
@@ -541,7 +555,7 @@ class Users(object):
 
                 privileges = set()
 
-                plusOne = Backend.getIdentifiedDbms() in (DBMS.ORACLE, DBMS.DB2)
+                plusOne = Backend.getIdentifiedDbms() in PLUS_ONE_DBMSES
                 indexRange = getLimitRange(count, plusOne=plusOne)
 
                 for index in indexRange:
@@ -571,16 +585,14 @@ class Users(object):
                         i = 1
 
                         for priv in privs:
-                            if priv.isdigit() and int(priv) == 1:
-                                for position, pgsqlPriv in PGSQL_PRIVS.items():
-                                    if position == i:
-                                        privileges.add(pgsqlPriv)
+                            if priv.isdigit() and int(priv) == 1 and i in PGSQL_PRIVS:
+                                privileges.add(PGSQL_PRIVS[i])
 
                             i += 1
 
                     # In MySQL >= 5.0 and Oracle we get the list
                     # of privileges as string
-                    elif Backend.isDbms(DBMS.ORACLE) or (Backend.isDbms(DBMS.MYSQL) and kb.data.has_information_schema):
+                    elif Backend.isDbms(DBMS.ORACLE) or (Backend.isDbms(DBMS.MYSQL) and kb.data.has_information_schema) or Backend.getIdentifiedDbms() in (DBMS.VERTICA, DBMS.MIMERSQL, DBMS.CUBRID):
                         privileges.add(privilege)
 
                     # In MySQL < 5.0 we get Y if the privilege is
@@ -605,7 +617,8 @@ class Users(object):
 
                     # In Informix we get one letter for the highest privilege
                     elif Backend.isDbms(DBMS.INFORMIX):
-                        privileges.add(INFORMIX_PRIVS[privilege.strip()])
+                        if privilege.strip() in INFORMIX_PRIVS:
+                            privileges.add(INFORMIX_PRIVS[privilege.strip()])
 
                     # In DB2 we get Y or G if the privilege is
                     # True, N otherwise
@@ -637,7 +650,7 @@ class Users(object):
                 else:
                     warnMsg = "unable to retrieve the privileges "
                     warnMsg += "for user '%s'" % outuser
-                    logger.warn(warnMsg)
+                    logger.warning(warnMsg)
 
                 retrievedUsers.add(user)
 
@@ -655,6 +668,6 @@ class Users(object):
     def getRoles(self, query2=False):
         warnMsg = "on %s the concept of roles does not " % Backend.getIdentifiedDbms()
         warnMsg += "exist. sqlmap will enumerate privileges instead"
-        logger.warn(warnMsg)
+        logger.warning(warnMsg)
 
         return self.getPrivileges(query2)

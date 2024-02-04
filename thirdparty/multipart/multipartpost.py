@@ -23,12 +23,12 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 import io
 import mimetypes
 import os
+import re
 import stat
 import sys
 
 from lib.core.compat import choose_boundary
 from lib.core.convert import getBytes
-from lib.core.convert import getText
 from lib.core.exception import SqlmapDataException
 from thirdparty.six.moves import urllib as _urllib
 
@@ -67,6 +67,14 @@ class MultipartPostHandler(_urllib.request.BaseHandler):
                 request.add_unredirected_header("Content-Type", contenttype)
 
             request.data = data
+
+        # NOTE: https://github.com/sqlmapproject/sqlmap/issues/4235
+        if request.data:
+            for match in re.finditer(b"(?i)\\s*-{20,}\\w+(\\s+Content-Disposition[^\\n]+\\s+|\\-\\-\\s*)", request.data):
+                part = match.group(0)
+                if b'\r' not in part:
+                    request.data = request.data.replace(part, part.replace(b'\n', b"\r\n"))
+
         return request
 
     def multipart_encode(self, vars, files, boundary=None, buf=None):

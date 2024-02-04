@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -42,9 +42,24 @@ class DBMS(object):
     PGSQL = "PostgreSQL"
     SQLITE = "SQLite"
     SYBASE = "Sybase"
+    INFORMIX = "Informix"
     HSQLDB = "HSQLDB"
     H2 = "H2"
-    INFORMIX = "Informix"
+    MONETDB = "MonetDB"
+    DERBY = "Apache Derby"
+    VERTICA = "Vertica"
+    MCKOI = "Mckoi"
+    PRESTO = "Presto"
+    ALTIBASE = "Altibase"
+    MIMERSQL = "MimerSQL"
+    CLICKHOUSE = "ClickHouse"
+    CRATEDB = "CrateDB"
+    CUBRID = "Cubrid"
+    CACHE = "InterSystems Cache"
+    EXTREMEDB = "eXtremeDB"
+    FRONTBASE = "FrontBase"
+    RAIMA = "Raima Database Manager"
+    VIRTUOSO = "Virtuoso"
 
 class DBMS_DIRECTORY_NAME(object):
     ACCESS = "access"
@@ -60,6 +75,37 @@ class DBMS_DIRECTORY_NAME(object):
     HSQLDB = "hsqldb"
     H2 = "h2"
     INFORMIX = "informix"
+    MONETDB = "monetdb"
+    DERBY = "derby"
+    VERTICA = "vertica"
+    MCKOI = "mckoi"
+    PRESTO = "presto"
+    ALTIBASE = "altibase"
+    MIMERSQL = "mimersql"
+    CLICKHOUSE = "clickhouse"
+    CRATEDB = "cratedb"
+    CUBRID = "cubrid"
+    CACHE = "cache"
+    EXTREMEDB = "extremedb"
+    FRONTBASE = "frontbase"
+    RAIMA = "raima"
+    VIRTUOSO = "virtuoso"
+
+class FORK(object):
+    MARIADB = "MariaDB"
+    MEMSQL = "MemSQL"
+    PERCONA = "Percona"
+    COCKROACHDB = "CockroachDB"
+    TIDB = "TiDB"
+    REDSHIFT = "Amazon Redshift"
+    GREENPLUM = "Greenplum"
+    DRIZZLE = "Drizzle"
+    IGNITE = "Apache Ignite"
+    AURORA = "Aurora"
+    ENTERPRISEDB = "EnterpriseDB"
+    YELLOWBRICK = "Yellowbrick"
+    IRIS = "Iris"
+    YUGABYTEDB = "YugabyteDB"
 
 class CUSTOM_LOGGING(object):
     PAYLOAD = 9
@@ -138,7 +184,7 @@ class HASH(object):
     SHA512_GENERIC = r'(?i)\A(0x)?[0-9a-f]{128}\Z'
     CRYPT_GENERIC = r'\A(?!\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\Z)(?![0-9]+\Z)[./0-9A-Za-z]{13}\Z'
     JOOMLA = r'\A[0-9a-f]{32}:\w{32}\Z'
-    WORDPRESS = r'\A\$P\$[./0-9a-zA-Z]{31}\Z'
+    PHPASS = r'\A\$[PHQS]\$[./0-9a-zA-Z]{31}\Z'
     APACHE_MD5_CRYPT = r'\A\$apr1\$.{1,8}\$[./a-zA-Z0-9]+\Z'
     UNIX_MD5_CRYPT = r'\A\$1\$.{1,8}\$[./a-zA-Z0-9]+\Z'
     APACHE_SHA1 = r'\A\{SHA\}[a-zA-Z0-9+/]+={0,2}\Z'
@@ -157,16 +203,16 @@ class HASH(object):
 # Reference: http://www.zytrax.com/tech/web/mobile_ids.html
 class MOBILES(object):
     BLACKBERRY = ("BlackBerry Z10", "Mozilla/5.0 (BB10; Kbd) AppleWebKit/537.35+ (KHTML, like Gecko) Version/10.3.3.2205 Mobile Safari/537.35+")
-    GALAXY = ("Samsung Galaxy S7", "Mozilla/5.0 (Linux; Android 7.0; SM-G930V Build/NRD90M) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.125 Mobile Safari/537.36")
+    GALAXY = ("Samsung Galaxy S8", "Mozilla/5.0 (Linux; Android 8.0.0; SM-G955U Build/R16NW; en-us) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.136 Mobile Safari/537.36 Puffin/9.0.0.50263AP")
     HP = ("HP iPAQ 6365", "Mozilla/4.0 (compatible; MSIE 4.01; Windows CE; PPC; 240x320; HP iPAQ h6300)")
     HTC = ("HTC 10", "Mozilla/5.0 (Linux; Android 8.0.0; HTC 10 Build/OPR1.170623.027) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Mobile Safari/537.36")
     HUAWEI = ("Huawei P8", "Mozilla/5.0 (Linux; Android 4.4.4; HUAWEI H891L Build/HuaweiH891L) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/33.0.0.0 Mobile Safari/537.36")
     IPHONE = ("Apple iPhone 8", "Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1")
-    LUMIA = ("Microsoft Lumia 950", "Mozilla/5.0 (Windows Phone 10.0; Android 6.0.1; Microsoft; Lumia 950) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Mobile Safari/537.36 Edge/15.14977")
+    LUMIA = ("Microsoft Lumia 950", "Mozilla/5.0 (Windows Phone 10.0; Android 6.0.1; Microsoft; Lumia 950) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Mobile Safari/537.36 Edge/15.15063")
     NEXUS = ("Google Nexus 7", "Mozilla/5.0 (Linux; Android 4.1.1; Nexus 7 Build/JRO03D) AppleWebKit/535.19 (KHTML, like Gecko) Chrome/18.0.1025.166 Safari/535.19")
     NOKIA = ("Nokia N97", "Mozilla/5.0 (SymbianOS/9.4; Series60/5.0 NokiaN97-1/10.0.012; Profile/MIDP-2.1 Configuration/CLDC-1.1; en-us) AppleWebKit/525 (KHTML, like Gecko) WicKed/7.1.12344")
-    PIXEL = ("Google Pixel", "Mozilla/5.0 (Linux; Android 8.0.0; Pixel Build/OPR3.170623.013) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.111 Mobile Safari/537.36")
-    XIAOMI = ("Xiaomi Mi 3", "Mozilla/5.0 (Linux; U; Android 4.4.4; en-gb; MI 3W Build/KTU84P) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/39.0.0.0 Mobile Safari/537.36 XiaoMi/MiuiBrowser/2.1.1")
+    PIXEL = ("Google Pixel", "Mozilla/5.0 (Linux; Android 10; Pixel) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.117 Mobile Safari/537.36")
+    XIAOMI = ("Xiaomi Mi 8 Pro", "Mozilla/5.0 (Linux; Android 9; MI 8 Pro Build/PKQ1.180729.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/87.0.4280.66 Mobile Safari/537.36")
 
 class PROXY_TYPE(object):
     HTTP = "HTTP"
@@ -200,6 +246,7 @@ class HTTP_HEADER(object):
     EXPIRES = "Expires"
     HOST = "Host"
     IF_MODIFIED_SINCE = "If-Modified-Since"
+    IF_NONE_MATCH = "If-None-Match"
     LAST_MODIFIED = "Last-Modified"
     LOCATION = "Location"
     PRAGMA = "Pragma"
@@ -357,6 +404,7 @@ class CONTENT_STATUS(object):
 class AUTH_TYPE(object):
     BASIC = "basic"
     DIGEST = "digest"
+    BEARER = "bearer"
     NTLM = "ntlm"
     PKI = "pki"
 
@@ -389,3 +437,63 @@ class TIMEOUT_STATE(object):
 class HINT(object):
     PREPEND = 0
     APPEND = 1
+
+class FUZZ_UNION_COLUMN:
+    STRING = "<string>"
+    INTEGER = "<integer>"
+    NULL = "NULL"
+
+class COLOR:
+    BLUE = "\033[34m"
+    BOLD_MAGENTA = "\033[35;1m"
+    BOLD_GREEN = "\033[32;1m"
+    BOLD_LIGHT_MAGENTA = "\033[95;1m"
+    LIGHT_GRAY = "\033[37m"
+    BOLD_RED = "\033[31;1m"
+    BOLD_LIGHT_GRAY = "\033[37;1m"
+    YELLOW = "\033[33m"
+    DARK_GRAY = "\033[90m"
+    BOLD_CYAN = "\033[36;1m"
+    LIGHT_RED = "\033[91m"
+    CYAN = "\033[36m"
+    MAGENTA = "\033[35m"
+    LIGHT_MAGENTA = "\033[95m"
+    LIGHT_GREEN = "\033[92m"
+    RESET = "\033[0m"
+    BOLD_DARK_GRAY = "\033[90;1m"
+    BOLD_LIGHT_YELLOW = "\033[93;1m"
+    BOLD_LIGHT_RED = "\033[91;1m"
+    BOLD_LIGHT_GREEN = "\033[92;1m"
+    LIGHT_YELLOW = "\033[93m"
+    BOLD_LIGHT_BLUE = "\033[94;1m"
+    BOLD_LIGHT_CYAN = "\033[96;1m"
+    LIGHT_BLUE = "\033[94m"
+    BOLD_WHITE = "\033[97;1m"
+    LIGHT_CYAN = "\033[96m"
+    BLACK = "\033[30m"
+    BOLD_YELLOW = "\033[33;1m"
+    BOLD_BLUE = "\033[34;1m"
+    GREEN = "\033[32m"
+    WHITE = "\033[97m"
+    BOLD_BLACK = "\033[30;1m"
+    RED = "\033[31m"
+    UNDERLINE = "\033[4m"
+
+class BACKGROUND:
+    BLUE = "\033[44m"
+    LIGHT_GRAY = "\033[47m"
+    YELLOW = "\033[43m"
+    DARK_GRAY = "\033[100m"
+    LIGHT_RED = "\033[101m"
+    CYAN = "\033[46m"
+    MAGENTA = "\033[45m"
+    LIGHT_MAGENTA = "\033[105m"
+    LIGHT_GREEN = "\033[102m"
+    RESET = "\033[0m"
+    LIGHT_YELLOW = "\033[103m"
+    LIGHT_BLUE = "\033[104m"
+    LIGHT_CYAN = "\033[106m"
+    BLACK = "\033[40m"
+    GREEN = "\033[42m"
+    WHITE = "\033[107m"
+    RED = "\033[41m"

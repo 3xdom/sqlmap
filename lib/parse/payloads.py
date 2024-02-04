@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -41,10 +41,10 @@ def cleanupVals(text, tag):
     return text
 
 def parseXmlNode(node):
-    for element in node.getiterator("boundary"):
+    for element in node.findall("boundary"):
         boundary = AttribDict()
 
-        for child in element.getchildren():
+        for child in element:
             if child.text:
                 values = cleanupVals(child.text, child.tag)
                 boundary[child.tag] = values
@@ -53,21 +53,21 @@ def parseXmlNode(node):
 
         conf.boundaries.append(boundary)
 
-    for element in node.getiterator("test"):
+    for element in node.findall("test"):
         test = AttribDict()
 
-        for child in element.getchildren():
+        for child in element:
             if child.text and child.text.strip():
                 values = cleanupVals(child.text, child.tag)
                 test[child.tag] = values
             else:
-                if len(child.getchildren()) == 0:
+                if len(child.findall("*")) == 0:
                     test[child.tag] = None
                     continue
                 else:
                     test[child.tag] = AttribDict()
 
-                for gchild in child.getchildren():
+                for gchild in child:
                     if gchild.tag in test[child.tag]:
                         prevtext = test[child.tag][gchild.tag]
                         test[child.tag][gchild.tag] = [prevtext, gchild.text]
@@ -77,6 +77,15 @@ def parseXmlNode(node):
         conf.tests.append(test)
 
 def loadBoundaries():
+    """
+    Loads boundaries from XML
+
+    >>> conf.boundaries = []
+    >>> loadBoundaries()
+    >>> len(conf.boundaries) > 0
+    True
+    """
+
     try:
         doc = et.parse(paths.BOUNDARIES_XML)
     except Exception as ex:
@@ -89,6 +98,15 @@ def loadBoundaries():
     parseXmlNode(root)
 
 def loadPayloads():
+    """
+    Loads payloads/tests from XML
+
+    >>> conf.tests = []
+    >>> loadPayloads()
+    >>> len(conf.tests) > 0
+    True
+    """
+
     for payloadFile in PAYLOAD_XML_FILES:
         payloadFilePath = os.path.join(paths.SQLMAP_XML_PAYLOADS_PATH, payloadFile)
 

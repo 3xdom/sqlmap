@@ -1,13 +1,12 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
 from __future__ import division
 
-import logging
 import time
 
 from lib.core.common import Backend
@@ -41,6 +40,7 @@ from lib.core.exception import SqlmapNoneDataException
 from lib.core.settings import BRUTE_COLUMN_EXISTS_TEMPLATE
 from lib.core.settings import BRUTE_TABLE_EXISTS_TEMPLATE
 from lib.core.settings import METADB_SUFFIX
+from lib.core.settings import UPPER_CASE_DBMSES
 from lib.core.threads import getCurrentThreadData
 from lib.core.threads import runThreads
 from lib.request import inject
@@ -62,15 +62,15 @@ def _addPageTextWords():
 
 @stackedmethod
 def tableExists(tableFile, regex=None):
-    if kb.tableExistsChoice is None and not any(_ for _ in kb.injection.data if _ not in (PAYLOAD.TECHNIQUE.TIME, PAYLOAD.TECHNIQUE.STACKED)) and not conf.direct:
+    if kb.choices.tableExists is None and not any(_ for _ in kb.injection.data if _ not in (PAYLOAD.TECHNIQUE.TIME, PAYLOAD.TECHNIQUE.STACKED)) and not conf.direct:
         warnMsg = "it's not recommended to use '%s' and/or '%s' " % (PAYLOAD.SQLINJECTION[PAYLOAD.TECHNIQUE.TIME], PAYLOAD.SQLINJECTION[PAYLOAD.TECHNIQUE.STACKED])
         warnMsg += "for common table existence check"
-        logger.warn(warnMsg)
+        logger.warning(warnMsg)
 
         message = "are you sure you want to continue? [y/N] "
-        kb.tableExistsChoice = readInput(message, default='N', boolean=True)
+        kb.choices.tableExists = readInput(message, default='N', boolean=True)
 
-        if not kb.tableExistsChoice:
+        if not kb.choices.tableExists:
             return None
 
     result = inject.checkBooleanExpression("%s" % safeStringFormat(BRUTE_TABLE_EXISTS_TEMPLATE, (randomInt(1), randomStr())))
@@ -83,7 +83,7 @@ def tableExists(tableFile, regex=None):
 
     pushValue(conf.db)
 
-    if conf.db and Backend.getIdentifiedDbms() in (DBMS.ORACLE, DBMS.DB2):
+    if conf.db and Backend.getIdentifiedDbms() in UPPER_CASE_DBMSES:
         conf.db = conf.db.upper()
 
     message = "which common tables (wordlist) file do you want to use?\n"
@@ -103,7 +103,7 @@ def tableExists(tableFile, regex=None):
     tables = filterListValue(tables, regex)
 
     for conf.db in (conf.db.split(',') if conf.db else [conf.db]):
-        if conf.db:
+        if conf.db and METADB_SUFFIX not in conf.db:
             infoMsg = "checking database '%s'" % conf.db
             logger.info(infoMsg)
 
@@ -131,7 +131,11 @@ def tableExists(tableFile, regex=None):
                 else:
                     fullTableName = table
 
-                result = inject.checkBooleanExpression("%s" % safeStringFormat(BRUTE_TABLE_EXISTS_TEMPLATE, (randomInt(1), fullTableName)))
+                if Backend.isDbms(DBMS.MCKOI):
+                    _ = randomInt(1)
+                    result = inject.checkBooleanExpression("%s" % safeStringFormat("%d=(SELECT %d FROM %s)", (_, _, fullTableName)))
+                else:
+                    result = inject.checkBooleanExpression("%s" % safeStringFormat(BRUTE_TABLE_EXISTS_TEMPLATE, (randomInt(1), fullTableName)))
 
                 kb.locks.io.acquire()
 
@@ -155,7 +159,7 @@ def tableExists(tableFile, regex=None):
         except KeyboardInterrupt:
             warnMsg = "user aborted during table existence "
             warnMsg += "check. sqlmap will display partial output"
-            logger.warn(warnMsg)
+            logger.warning(warnMsg)
 
         clearConsoleLine(True)
         dataToStdout("\n")
@@ -163,8 +167,8 @@ def tableExists(tableFile, regex=None):
         if not threadData.shared.files:
             warnMsg = "no table(s) found"
             if conf.db:
-                 warnMsg += " for database '%s'" % conf.db
-            logger.warn(warnMsg)
+                warnMsg += " for database '%s'" % conf.db
+            logger.warning(warnMsg)
         else:
             for item in threadData.shared.files:
                 if conf.db not in kb.data.cachedTables:
@@ -182,22 +186,22 @@ def tableExists(tableFile, regex=None):
     return kb.data.cachedTables
 
 def columnExists(columnFile, regex=None):
-    if kb.columnExistsChoice is None and not any(_ for _ in kb.injection.data if _ not in (PAYLOAD.TECHNIQUE.TIME, PAYLOAD.TECHNIQUE.STACKED)) and not conf.direct:
+    if kb.choices.columnExists is None and not any(_ for _ in kb.injection.data if _ not in (PAYLOAD.TECHNIQUE.TIME, PAYLOAD.TECHNIQUE.STACKED)) and not conf.direct:
         warnMsg = "it's not recommended to use '%s' and/or '%s' " % (PAYLOAD.SQLINJECTION[PAYLOAD.TECHNIQUE.TIME], PAYLOAD.SQLINJECTION[PAYLOAD.TECHNIQUE.STACKED])
         warnMsg += "for common column existence check"
-        logger.warn(warnMsg)
+        logger.warning(warnMsg)
 
         message = "are you sure you want to continue? [y/N] "
-        kb.columnExistsChoice = readInput(message, default='N', boolean=True)
+        kb.choices.columnExists = readInput(message, default='N', boolean=True)
 
-        if not kb.columnExistsChoice:
+        if not kb.choices.columnExists:
             return None
 
     if not conf.tbl:
         errMsg = "missing table parameter"
         raise SqlmapMissingMandatoryOptionException(errMsg)
 
-    if conf.db and Backend.getIdentifiedDbms() in (DBMS.ORACLE, DBMS.DB2):
+    if conf.db and Backend.getIdentifiedDbms() in UPPER_CASE_DBMSES:
         conf.db = conf.db.upper()
 
     result = inject.checkBooleanExpression(safeStringFormat(BRUTE_COLUMN_EXISTS_TEMPLATE, (randomStr(), randomStr())))
@@ -250,7 +254,10 @@ def columnExists(columnFile, regex=None):
                 kb.locks.count.release()
                 break
 
-            result = inject.checkBooleanExpression(safeStringFormat(BRUTE_COLUMN_EXISTS_TEMPLATE, (column, table)))
+            if Backend.isDbms(DBMS.MCKOI):
+                result = inject.checkBooleanExpression(safeStringFormat("0<(SELECT COUNT(%s) FROM %s)", (column, table)))
+            else:
+                result = inject.checkBooleanExpression(safeStringFormat(BRUTE_COLUMN_EXISTS_TEMPLATE, (column, table)))
 
             kb.locks.io.acquire()
 
@@ -273,7 +280,7 @@ def columnExists(columnFile, regex=None):
     except KeyboardInterrupt:
         warnMsg = "user aborted during column existence "
         warnMsg += "check. sqlmap will display partial output"
-        logger.warn(warnMsg)
+        logger.warning(warnMsg)
     finally:
         kb.bruteMode = False
 
@@ -282,13 +289,17 @@ def columnExists(columnFile, regex=None):
 
     if not threadData.shared.files:
         warnMsg = "no column(s) found"
-        logger.warn(warnMsg)
+        logger.warning(warnMsg)
     else:
         columns = {}
 
         for column in threadData.shared.files:
             if Backend.getIdentifiedDbms() in (DBMS.MYSQL,):
                 result = not inject.checkBooleanExpression("%s" % safeStringFormat("EXISTS(SELECT %s FROM %s WHERE %s REGEXP '[^0-9]')", (column, table, column)))
+            elif Backend.getIdentifiedDbms() in (DBMS.SQLITE,):
+                result = inject.checkBooleanExpression("%s" % safeStringFormat("EXISTS(SELECT %s FROM %s WHERE %s NOT GLOB '*[^0-9]*')", (column, table, column)))
+            elif Backend.getIdentifiedDbms() in (DBMS.MCKOI,):
+                result = inject.checkBooleanExpression("%s" % safeStringFormat("0=(SELECT MAX(%s)-MAX(%s) FROM %s)", (column, column, table)))
             else:
                 result = inject.checkBooleanExpression("%s" % safeStringFormat("EXISTS(SELECT %s FROM %s WHERE ROUND(%s)=ROUND(%s))", (column, table, column, column)))
 
@@ -375,24 +386,20 @@ def fileExists(pathFile):
             kb.locks.io.release()
 
     try:
-        pushValue(logger.getEffectiveLevel())
-        logger.setLevel(logging.CRITICAL)
-
         runThreads(conf.threads, fileExistsThread, threadChoice=True)
     except KeyboardInterrupt:
         warnMsg = "user aborted during file existence "
         warnMsg += "check. sqlmap will display partial output"
-        logger.warn(warnMsg)
+        logger.warning(warnMsg)
     finally:
         kb.bruteMode = False
-        logger.setLevel(popValue())
 
     clearConsoleLine(True)
     dataToStdout("\n")
 
     if not threadData.shared.files:
         warnMsg = "no file(s) found"
-        logger.warn(warnMsg)
+        logger.warning(warnMsg)
     else:
         retVal = threadData.shared.files
 

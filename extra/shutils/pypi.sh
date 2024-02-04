@@ -16,7 +16,7 @@ cat > $TMP_DIR/setup.py << EOF
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -30,7 +30,7 @@ setup(
     long_description_content_type='text/x-rst',
     author='Bernardo Damele Assumpcao Guimaraes, Miroslav Stampar',
     author_email='bernardo@sqlmap.org, miroslav@sqlmap.org',
-    url='http://sqlmap.org',
+    url='https://sqlmap.org',
     project_urls={
         'Documentation': 'https://github.com/sqlmapproject/sqlmap/wiki',
         'Source': 'https://github.com/sqlmapproject/sqlmap/',
@@ -67,7 +67,7 @@ cat > sqlmap/__init__.py << EOF
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -81,7 +81,7 @@ cat > README.rst << "EOF"
 sqlmap
 ======
 
-|Build Status| |Python 2.6|2.7|3.x| |License| |Twitter|
+|Python 2.6|2.7|3.x| |License| |Twitter|
 
 sqlmap is an open source penetration testing tool that automates the
 process of detecting and exploiting SQL injection flaws and taking over
@@ -132,13 +132,13 @@ To get a list of basic options and switches use:
 
 ::
 
-    python sqlmap.py -h
+    sqlmap -h
 
 To get a list of all options and switches use:
 
 ::
 
-    python sqlmap.py -hh
+    sqlmap -hh
 
 You can find a sample run `here <https://asciinema.org/a/46601>`__. To
 get an overview of sqlmap capabilities, list of supported features and
@@ -149,7 +149,7 @@ manual <https://github.com/sqlmapproject/sqlmap/wiki/Usage>`__.
 Links
 -----
 
--  Homepage: http://sqlmap.org
+-  Homepage: https://sqlmap.org
 -  Download:
    `.tar.gz <https://github.com/sqlmapproject/sqlmap/tarball/master>`__
    or `.zip <https://github.com/sqlmapproject/sqlmap/zipball/master>`__
@@ -163,8 +163,6 @@ Links
 -  Demos: http://www.youtube.com/user/inquisb/videos
 -  Screenshots: https://github.com/sqlmapproject/sqlmap/wiki/Screenshots
 
-.. |Build Status| image:: https://api.travis-ci.org/sqlmapproject/sqlmap.svg?branch=master
-   :target: https://api.travis-ci.org/sqlmapproject/sqlmap
 .. |Python 2.6|2.7|3.x| image:: https://img.shields.io/badge/python-2.6|2.7|3.x-yellow.svg
    :target: https://www.python.org/
 .. |License| image:: https://img.shields.io/badge/license-GPLv2-red.svg

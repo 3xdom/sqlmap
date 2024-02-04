@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -26,6 +26,8 @@ from lib.core.common import goGoodSamaritan
 from lib.core.common import hashDBRetrieve
 from lib.core.common import hashDBWrite
 from lib.core.common import incrementCounter
+from lib.core.common import isDigit
+from lib.core.common import isListLike
 from lib.core.common import safeStringFormat
 from lib.core.common import singleTimeWarnMessage
 from lib.core.data import conf
@@ -37,6 +39,7 @@ from lib.core.enums import CHARSET_TYPE
 from lib.core.enums import DBMS
 from lib.core.enums import PAYLOAD
 from lib.core.exception import SqlmapThreadException
+from lib.core.exception import SqlmapUnsupportedFeatureException
 from lib.core.settings import CHAR_INFERENCE_MARK
 from lib.core.settings import INFERENCE_BLANK_BREAK
 from lib.core.settings import INFERENCE_EQUALS_CHAR
@@ -59,6 +62,7 @@ from lib.request.connect import Connect as Request
 from lib.utils.progress import ProgressBar
 from lib.utils.safe2bin import safecharencode
 from lib.utils.xrange import xrange
+from thirdparty import six
 
 def bisection(payload, expression, length=None, charsetType=None, firstChar=None, lastChar=None, dump=False):
     """
@@ -107,6 +111,21 @@ def bisection(payload, expression, length=None, charsetType=None, firstChar=None
 
             return 0, retVal
 
+    if Backend.isDbms(DBMS.MCKOI):
+        match = re.search(r"\ASELECT\b(.+)\bFROM\b(.+)\Z", expression, re.I)
+        if match:
+            original = queries[Backend.getIdentifiedDbms()].inference.query
+            right = original.split('<')[1]
+            payload = payload.replace(right, "(SELECT %s FROM %s)" % (right, match.group(2).strip()))
+            expression = match.group(1).strip()
+
+    elif Backend.isDbms(DBMS.FRONTBASE):
+        match = re.search(r"\ASELECT\b(\s+TOP\s*\([^)]+\)\s+)?(.+)\bFROM\b(.+)\Z", expression, re.I)
+        if match:
+            payload = payload.replace(INFERENCE_GREATER_CHAR, " FROM %s)%s" % (match.group(3).strip(), INFERENCE_GREATER_CHAR))
+            payload = payload.replace("SUBSTRING", "(SELECT%sSUBSTRING" % (match.group(1) if match.group(1) else " "), 1)
+            expression = match.group(2).strip()
+
     try:
         # Set kb.partRun in case "common prediction" feature (a.k.a. "good samaritan") is used or the engine is called from the API
         if conf.predictOutput:
@@ -118,9 +137,9 @@ def bisection(payload, expression, length=None, charsetType=None, firstChar=None
 
         if partialValue:
             firstChar = len(partialValue)
-        elif re.search(r"(?i)\b(LENGTH|LEN)\(", expression):
+        elif re.search(r"(?i)(\b|CHAR_)(LENGTH|LEN|COUNT)\(", expression):
             firstChar = 0
-        elif (kb.fileReadMode or dump) and conf.firstChar is not None and (isinstance(conf.firstChar, int) or (hasattr(conf.firstChar, "isdigit") and conf.firstChar.isdigit())):
+        elif conf.firstChar is not None and (isinstance(conf.firstChar, int) or (hasattr(conf.firstChar, "isdigit") and conf.firstChar.isdigit())):
             firstChar = int(conf.firstChar) - 1
             if kb.fileReadMode:
                 firstChar <<= 1
@@ -129,9 +148,9 @@ def bisection(payload, expression, length=None, charsetType=None, firstChar=None
         else:
             firstChar = 0
 
-        if re.search(r"(?i)\b(LENGTH|LEN)\(", expression):
+        if re.search(r"(?i)(\b|CHAR_)(LENGTH|LEN|COUNT)\(", expression):
             lastChar = 0
-        elif dump and conf.lastChar is not None and (isinstance(conf.lastChar, int) or (hasattr(conf.lastChar, "isdigit") and conf.lastChar.isdigit())):
+        elif conf.lastChar is not None and (isinstance(conf.lastChar, int) or (hasattr(conf.lastChar, "isdigit") and conf.lastChar.isdigit())):
             lastChar = int(conf.lastChar)
         elif hasattr(lastChar, "isdigit") and lastChar.isdigit() or isinstance(lastChar, int):
             lastChar = int(lastChar)
@@ -146,7 +165,7 @@ def bisection(payload, expression, length=None, charsetType=None, firstChar=None
         else:
             expressionUnescaped = unescaper.escape(expression)
 
-        if hasattr(length, "isdigit") and length.isdigit() or isinstance(length, int):
+        if isinstance(length, six.string_types) and isDigit(length) or isinstance(length, int):
             length = int(length)
         else:
             length = None
@@ -194,14 +213,14 @@ def bisection(payload, expression, length=None, charsetType=None, firstChar=None
                 hintValue = kb.hintValue
 
             if payload is not None and len(hintValue or "") > 0 and len(hintValue) >= idx:
-                if Backend.getIdentifiedDbms() in (DBMS.SQLITE, DBMS.ACCESS, DBMS.MAXDB, DBMS.DB2):
+                if "'%s'" % CHAR_INFERENCE_MARK in payload:
                     posValue = hintValue[idx - 1]
                 else:
                     posValue = ord(hintValue[idx - 1])
 
                 markingValue = "'%s'" % CHAR_INFERENCE_MARK
                 unescapedCharValue = unescaper.escape("'%s'" % decodeIntToUnicode(posValue))
-                forgedPayload = agent.extractPayload(payload)
+                forgedPayload = agent.extractPayload(payload) or ""
                 forgedPayload = safeStringFormat(forgedPayload.replace(INFERENCE_GREATER_CHAR, INFERENCE_EQUALS_CHAR), (expressionUnescaped, idx, posValue)).replace(markingValue, unescapedCharValue)
                 result = Request.queryPage(agent.replacePayload(payload, forgedPayload), timeBasedCompare=timeBasedCompare, raise404=False)
                 incrementCounter(getTechnique())
@@ -257,9 +276,11 @@ def bisection(payload, expression, length=None, charsetType=None, firstChar=None
 
             originalTbl = type(charTbl)(charTbl)
 
-            if continuousOrder and shiftTable is None:
+            if kb.disableShiftTable:
+                shiftTable = None
+            elif continuousOrder and shiftTable is None:
                 # Used for gradual expanding into unicode charspace
-                shiftTable = [2, 2, 3, 3, 5, 4]
+                shiftTable = [2, 2, 3, 3, 3]
 
             if "'%s'" % CHAR_INFERENCE_MARK in payload:
                 for char in ('\n', '\r'):
@@ -341,12 +362,19 @@ def bisection(payload, expression, length=None, charsetType=None, firstChar=None
                             kb.responseTimePayload = None
 
                     result = Request.queryPage(forgedPayload, timeBasedCompare=timeBasedCompare, raise404=False)
+
                     incrementCounter(getTechnique())
 
                     if not timeBasedCompare and getTechniqueData() is not None:
                         unexpectedCode |= threadData.lastCode not in (getTechniqueData().falseCode, getTechniqueData().trueCode)
                         if unexpectedCode:
-                            warnMsg = "unexpected HTTP code '%s' detected. Will use (extra) validation step in similar cases" % threadData.lastCode
+                            if threadData.lastCode is not None:
+                                warnMsg = "unexpected HTTP code '%s' detected." % threadData.lastCode
+                            else:
+                                warnMsg = "unexpected response detected."
+
+                            warnMsg += " Will use (extra) validation step in similar cases"
+
                             singleTimeWarnMessage(warnMsg)
 
                     if result:
@@ -382,6 +410,7 @@ def bisection(payload, expression, length=None, charsetType=None, firstChar=None
                                 maxChar = maxValue = charTbl[-1]
                                 minValue = charTbl[0]
                             else:
+                                kb.disableShiftTable = True
                                 return None
                         else:
                             retVal = minValue + 1
@@ -400,7 +429,7 @@ def bisection(payload, expression, length=None, charsetType=None, firstChar=None
                                             if kb.adjustTimeDelay is not ADJUST_TIME_DELAY.DISABLE:
                                                 conf.timeSec += 1
                                                 warnMsg = "increasing time delay to %d second%s" % (conf.timeSec, 's' if conf.timeSec > 1 else '')
-                                                logger.warn(warnMsg)
+                                                logger.warning(warnMsg)
 
                                             if kb.adjustTimeDelay is ADJUST_TIME_DELAY.YES:
                                                 dbgMsg = "turning off time auto-adjustment mechanism"
@@ -425,6 +454,10 @@ def bisection(payload, expression, length=None, charsetType=None, firstChar=None
                             else:
                                 return None
             else:
+                if "'%s'" % CHAR_INFERENCE_MARK in payload and conf.charset:
+                    errMsg = "option '--charset' is not supported on '%s'" % Backend.getIdentifiedDbms()
+                    raise SqlmapUnsupportedFeatureException(errMsg)
+
                 candidates = list(originalTbl)
                 bit = 0
                 while len(candidates) > 1:
@@ -482,6 +515,10 @@ def bisection(payload, expression, length=None, charsetType=None, firstChar=None
                             if val is None:
                                 val = INFERENCE_UNKNOWN_CHAR
                         else:
+                            break
+
+                        # NOTE: https://github.com/sqlmapproject/sqlmap/issues/4629
+                        if not isListLike(threadData.shared.value):
                             break
 
                         with kb.locks.value:
@@ -636,8 +673,8 @@ def bisection(payload, expression, length=None, charsetType=None, firstChar=None
                 elif (conf.verbose in (1, 2) and not kb.bruteMode) or conf.api:
                     dataToStdout(filterControlChars(val))
 
-                # some DBMSes (e.g. Firebird, DB2, etc.) have issues with trailing spaces
-                if Backend.getIdentifiedDbms() in (DBMS.FIREBIRD, DBMS.DB2, DBMS.MAXDB) and len(partialValue) > INFERENCE_BLANK_BREAK and partialValue[-INFERENCE_BLANK_BREAK:].isspace():
+                # Note: some DBMSes (e.g. Firebird, DB2, etc.) have issues with trailing spaces
+                if Backend.getIdentifiedDbms() in (DBMS.FIREBIRD, DBMS.DB2, DBMS.MAXDB, DBMS.DERBY, DBMS.FRONTBASE) and len(partialValue) > INFERENCE_BLANK_BREAK and partialValue[-INFERENCE_BLANK_BREAK:].isspace():
                     finalValue = partialValue[:-INFERENCE_BLANK_BREAK]
                     break
                 elif charsetType and partialValue[-1:].isspace():
@@ -696,7 +733,7 @@ def queryOutputLength(expression, payload):
     lengthExprUnescaped = agent.forgeQueryOutputLength(expression)
     count, length = bisection(payload, lengthExprUnescaped, charsetType=CHARSET_TYPE.DIGITS)
 
-    debugMsg = "performed %d queries in %.2f seconds" % (count, calculateDeltaSeconds(start))
+    debugMsg = "performed %d quer%s in %.2f seconds" % (count, 'y' if count == 1 else "ies", calculateDeltaSeconds(start))
     logger.debug(debugMsg)
 
     if length == " ":

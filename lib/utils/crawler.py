@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -28,7 +28,6 @@ from lib.core.data import conf
 from lib.core.data import kb
 from lib.core.data import logger
 from lib.core.datatype import OrderedSet
-from lib.core.enums import HTTPMETHOD
 from lib.core.enums import MKSTEMP_PREFIX
 from lib.core.exception import SqlmapConnectionException
 from lib.core.exception import SqlmapSyntaxException
@@ -42,7 +41,10 @@ from thirdparty.beautifulsoup.beautifulsoup import BeautifulSoup
 from thirdparty.six.moves import http_client as _http_client
 from thirdparty.six.moves import urllib as _urllib
 
-def crawl(target):
+def crawl(target, post=None, cookie=None):
+    if not target:
+        return
+
     try:
         visited = set()
         threadData = getCurrentThreadData()
@@ -70,7 +72,7 @@ def crawl(target):
                 content = None
                 try:
                     if current:
-                        content = Request.getPage(url=current, crawling=True, raise404=False)[0]
+                        content = Request.getPage(url=current, post=post, cookie=None, crawling=True, raise404=False)[0]
                 except SqlmapConnectionException as ex:
                     errMsg = "connection exception detected ('%s'). skipping " % getSafeExString(ex)
                     errMsg += "URL '%s'" % current
@@ -124,6 +126,8 @@ def crawl(target):
                         pass
                     except ValueError:          # for non-valid links
                         pass
+                    except AssertionError:      # for invalid HTML
+                        pass
                     finally:
                         if conf.forms:
                             threadData.shared.formsFound |= len(findPageForms(content, current, False, True)) > 0
@@ -158,7 +162,7 @@ def crawl(target):
             except SqlmapConnectionException as ex:
                 if "page not found" in getSafeExString(ex):
                     found = False
-                    logger.warn("'sitemap.xml' not found")
+                    logger.warning("'sitemap.xml' not found")
             except:
                 pass
             finally:
@@ -194,7 +198,7 @@ def crawl(target):
     except KeyboardInterrupt:
         warnMsg = "user aborted during crawling. sqlmap "
         warnMsg += "will use partial list"
-        logger.warn(warnMsg)
+        logger.warning(warnMsg)
 
     finally:
         clearConsoleLine(True)
@@ -204,7 +208,7 @@ def crawl(target):
                 warnMsg = "no usable links found (with GET parameters)"
                 if conf.forms:
                     warnMsg += " or forms"
-                logger.warn(warnMsg)
+                logger.warning(warnMsg)
         else:
             for url in threadData.shared.value:
                 kb.targets.add((urldecode(url, kb.pageEncoding), None, None, None, None))
@@ -221,15 +225,13 @@ def crawl(target):
                 results = OrderedSet()
 
                 for target in kb.targets:
-                    if target[1] in (HTTPMETHOD.GET, None):
-                        match = re.search(r"/[^/?]*\?.*\Z", target[0])
-                        if match:
-                            key = re.sub(r"=[^=&]*", "=", match.group(0)).strip('&')
-                            if key not in seen:
-                                results.add(target)
-                                seen.add(key)
-                    else:
-                        results.add(target)
+                    value = "%s%s%s" % (target[0], '&' if '?' in target[0] else '?', target[2] or "")
+                    match = re.search(r"/[^/?]*\?.+\Z", value)
+                    if match:
+                        key = re.sub(r"=[^=&]*", "=", match.group(0)).strip("&?")
+                        if '=' in key and key not in seen:
+                            results.add(target)
+                            seen.add(key)
 
                 kb.targets = results
 

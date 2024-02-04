@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -11,24 +11,27 @@ import random
 import re
 import string
 import sys
+import time
 
 from lib.core.enums import DBMS
 from lib.core.enums import DBMS_DIRECTORY_NAME
 from lib.core.enums import OS
+from thirdparty import six
 from thirdparty.six import unichr as _unichr
 
 # sqlmap version (<major>.<minor>.<month>.<monthly commit>)
-VERSION = "1.3.11.50"
+VERSION = "1.7.4.11"
 TYPE = "dev" if VERSION.count('.') > 2 and VERSION.split('.')[-1] != '0' else "stable"
 TYPE_COLORS = {"dev": 33, "stable": 90, "pip": 34}
 VERSION_STRING = "sqlmap/%s#%s" % ('.'.join(VERSION.split('.')[:-1]) if VERSION.count('.') > 2 and VERSION.split('.')[-1] == '0' else VERSION, TYPE)
 DESCRIPTION = "automatic SQL injection and database takeover tool"
-SITE = "http://sqlmap.org"
+SITE = "https://sqlmap.org"
 DEFAULT_USER_AGENT = "%s (%s)" % (VERSION_STRING, SITE)
 DEV_EMAIL_ADDRESS = "dev@sqlmap.org"
 ISSUES_PAGE = "https://github.com/sqlmapproject/sqlmap/issues/new"
 GIT_REPOSITORY = "https://github.com/sqlmapproject/sqlmap.git"
 GIT_PAGE = "https://github.com/sqlmapproject/sqlmap"
+WIKI_PAGE = "https://github.com/sqlmapproject/sqlmap/wiki/"
 ZIPBALL_PAGE = "https://github.com/sqlmapproject/sqlmap/zipball/master"
 
 # colorful banner
@@ -51,6 +54,9 @@ IPS_WAF_CHECK_RATIO = 0.5
 # Timeout used in heuristic check for WAF/IPS protected targets
 IPS_WAF_CHECK_TIMEOUT = 10
 
+# Timeout used in checking for existence of live-cookies file
+LIVE_COOKIES_TIMEOUT = 120
+
 # Lower and upper values for match ratio in case of stable page
 LOWER_RATIO_BOUND = 0.02
 UPPER_RATIO_BOUND = 0.98
@@ -59,20 +65,24 @@ UPPER_RATIO_BOUND = 0.98
 PARAMETER_AMP_MARKER = "__AMP__"
 PARAMETER_SEMICOLON_MARKER = "__SEMICOLON__"
 BOUNDARY_BACKSLASH_MARKER = "__BACKSLASH__"
+PARAMETER_PERCENTAGE_MARKER = "__PERCENTAGE__"
 PARTIAL_VALUE_MARKER = "__PARTIAL_VALUE__"
 PARTIAL_HEX_VALUE_MARKER = "__PARTIAL_HEX_VALUE__"
-URI_QUESTION_MARKER = "__QUESTION_MARK__"
-ASTERISK_MARKER = "__ASTERISK_MARK__"
-REPLACEMENT_MARKER = "__REPLACEMENT_MARK__"
-BOUNDED_INJECTION_MARKER = "__BOUNDED_INJECTION_MARK__"
+URI_QUESTION_MARKER = "__QUESTION__"
+ASTERISK_MARKER = "__ASTERISK__"
+REPLACEMENT_MARKER = "__REPLACEMENT__"
+BOUNDED_BASE64_MARKER = "__BOUNDED_BASE64__"
+BOUNDED_INJECTION_MARKER = "__BOUNDED_INJECTION__"
 SAFE_VARIABLE_MARKER = "__SAFE__"
 SAFE_HEX_MARKER = "__SAFE_HEX__"
+DOLLAR_MARKER = "__DOLLAR__"
 
 RANDOM_INTEGER_MARKER = "[RANDINT]"
 RANDOM_STRING_MARKER = "[RANDSTR]"
 SLEEP_TIME_MARKER = "[SLEEPTIME]"
 INFERENCE_MARKER = "[INFERENCE]"
 SINGLE_QUOTE_MARKER = "[SINGLE_QUOTE]"
+GENERIC_SQL_COMMENT_MARKER = "[GENERIC_SQL_COMMENT]"
 
 PAYLOAD_DELIMITER = "__PAYLOAD_DELIMITER__"
 CHAR_INFERENCE_MARK = "%c"
@@ -90,8 +100,14 @@ PERMISSION_DENIED_REGEX = r"(?P<result>(command|permission|access)\s*(was|is)?\s
 # Regular expression used in recognition of generic protection mechanisms
 GENERIC_PROTECTION_REGEX = r"(?i)\b(rejected|blocked|protection|incident|denied|detected|dangerous|firewall)\b"
 
+# Regular expression used to detect errors in fuzz(y) UNION test
+FUZZ_UNION_ERROR_REGEX = r"(?i)data\s?type|comparable|compatible|conversion|converting|failed|error"
+
+# Upper threshold for starting the fuzz(y) UNION test
+FUZZ_UNION_MAX_COLUMNS = 10
+
 # Regular expression used for recognition of generic maximum connection messages
-MAX_CONNECTIONS_REGEX = r"\bmax.+?\bconnection"
+MAX_CONNECTIONS_REGEX = r"\bmax.{1,100}\bconnection"
 
 # Maximum consecutive connection errors before asking the user if he wants to continue
 MAX_CONSECUTIVE_CONNECTION_ERRORS = 15
@@ -110,6 +126,9 @@ MAX_MURPHY_SLEEP_TIME = 3
 
 # Regular expression used for extracting results from Google search
 GOOGLE_REGEX = r"webcache\.googleusercontent\.com/search\?q=cache:[^:]+:([^+]+)\+&amp;cd=|url\?\w+=((?![^>]+webcache\.googleusercontent\.com)http[^>]+)&(sa=U|rct=j)"
+
+# Google Search consent cookie
+GOOGLE_CONSENT_COOKIE = "CONSENT=YES+shp.gws-%s-0-RC1.%s+FX+740" % (time.strftime("%Y%m%d"), "".join(random.sample(string.ascii_lowercase, 2)))
 
 # Regular expression used for extracting results from DuckDuckGo search
 DUCKDUCKGO_REGEX = r'<a class="result__url" href="(htt[^"]+)'
@@ -231,13 +250,16 @@ STDIN_PIPE_DASH = '-'
 # URL used in dummy runs
 DUMMY_URL = "http://foo/bar?id=1"
 
+# Timeout used during initial websocket (pull) testing
+WEBSOCKET_INITIAL_TIMEOUT = 3
+
 # The name of the operating system dependent module imported. The following names have currently been registered: 'posix', 'nt', 'mac', 'os2', 'ce', 'java', 'riscos'
 PLATFORM = os.name
 PYVERSION = sys.version.split()[0]
 IS_WIN = PLATFORM == "nt"
 
 # Check if running in terminal
-IS_TTY = os.isatty(sys.stdout.fileno())
+IS_TTY = hasattr(sys.stdout, "fileno") and os.isatty(sys.stdout.fileno())
 
 # DBMS system databases
 MSSQL_SYSTEM_DBS = ("Northwind", "master", "model", "msdb", "pubs", "tempdb", "Resource", "ReportServer", "ReportServerTempDB")
@@ -251,35 +273,76 @@ MAXDB_SYSTEM_DBS = ("SYSINFO", "DOMAIN")
 SYBASE_SYSTEM_DBS = ("master", "model", "sybsystemdb", "sybsystemprocs")
 DB2_SYSTEM_DBS = ("NULLID", "SQLJ", "SYSCAT", "SYSFUN", "SYSIBM", "SYSIBMADM", "SYSIBMINTERNAL", "SYSIBMTS", "SYSPROC", "SYSPUBLIC", "SYSSTAT", "SYSTOOLS")
 HSQLDB_SYSTEM_DBS = ("INFORMATION_SCHEMA", "SYSTEM_LOB")
-H2_SYSTEM_DBS = ("INFORMATION_SCHEMA",)
+H2_SYSTEM_DBS = ("INFORMATION_SCHEMA",) + ("IGNITE", "ignite-sys-cache")
 INFORMIX_SYSTEM_DBS = ("sysmaster", "sysutils", "sysuser", "sysadmin")
+MONETDB_SYSTEM_DBS = ("tmp", "json", "profiler")
+DERBY_SYSTEM_DBS = ("NULLID", "SQLJ", "SYS", "SYSCAT", "SYSCS_DIAG", "SYSCS_UTIL", "SYSFUN", "SYSIBM", "SYSPROC", "SYSSTAT")
+VERTICA_SYSTEM_DBS = ("v_catalog", "v_internal", "v_monitor",)
+MCKOI_SYSTEM_DBS = ("",)
+PRESTO_SYSTEM_DBS = ("information_schema",)
+ALTIBASE_SYSTEM_DBS = ("SYSTEM_",)
+MIMERSQL_SYSTEM_DBS = ("information_schema", "SYSTEM",)
+CRATEDB_SYSTEM_DBS = ("information_schema", "pg_catalog", "sys")
+CLICKHOUSE_SYSTEM_DBS = ("information_schema", "INFORMATION_SCHEMA", "system")
+CUBRID_SYSTEM_DBS = ("DBA",)
+CACHE_SYSTEM_DBS = ("%Dictionary", "INFORMATION_SCHEMA", "%SYS")
+EXTREMEDB_SYSTEM_DBS = ("",)
+FRONTBASE_SYSTEM_DBS = ("DEFINITION_SCHEMA", "INFORMATION_SCHEMA")
+RAIMA_SYSTEM_DBS = ("",)
+VIRTUOSO_SYSTEM_DBS = ("",)
 
+# Note: (<regular>) + (<forks>)
 MSSQL_ALIASES = ("microsoft sql server", "mssqlserver", "mssql", "ms")
-MYSQL_ALIASES = ("mysql", "my", "mariadb", "maria")
-PGSQL_ALIASES = ("postgresql", "postgres", "pgsql", "psql", "pg")
+MYSQL_ALIASES = ("mysql", "my") + ("mariadb", "maria", "memsql", "tidb", "percona", "drizzle")
+PGSQL_ALIASES = ("postgresql", "postgres", "pgsql", "psql", "pg") + ("cockroach", "cockroachdb", "amazon redshift", "redshift", "greenplum", "yellowbrick", "enterprisedb", "yugabyte", "yugabytedb")
 ORACLE_ALIASES = ("oracle", "orcl", "ora", "or")
 SQLITE_ALIASES = ("sqlite", "sqlite3")
-ACCESS_ALIASES = ("msaccess", "access", "jet", "microsoft access")
+ACCESS_ALIASES = ("microsoft access", "msaccess", "access", "jet")
 FIREBIRD_ALIASES = ("firebird", "mozilla firebird", "interbase", "ibase", "fb")
-MAXDB_ALIASES = ("maxdb", "sap maxdb", "sap db")
+MAXDB_ALIASES = ("max", "maxdb", "sap maxdb", "sap db")
 SYBASE_ALIASES = ("sybase", "sybase sql server")
 DB2_ALIASES = ("db2", "ibm db2", "ibmdb2")
 HSQLDB_ALIASES = ("hsql", "hsqldb", "hs", "hypersql")
-H2_ALIASES = ("h2",)
+H2_ALIASES = ("h2",) + ("ignite", "apache ignite")
 INFORMIX_ALIASES = ("informix", "ibm informix", "ibminformix")
+MONETDB_ALIASES = ("monet", "monetdb",)
+DERBY_ALIASES = ("derby", "apache derby",)
+VERTICA_ALIASES = ("vertica",)
+MCKOI_ALIASES = ("mckoi",)
+PRESTO_ALIASES = ("presto",)
+ALTIBASE_ALIASES = ("altibase",)
+MIMERSQL_ALIASES = ("mimersql", "mimer")
+CRATEDB_ALIASES = ("cratedb", "crate")
+CUBRID_ALIASES = ("cubrid",)
+CLICKHOUSE_ALIASES = ("clickhouse",)
+CACHE_ALIASES = ("intersystems cache", "cachedb", "cache", "iris")
+EXTREMEDB_ALIASES = ("extremedb", "extreme")
+FRONTBASE_ALIASES = ("frontbase",)
+RAIMA_ALIASES = ("raima database manager", "raima", "raimadb", "raimadm", "rdm", "rds", "velocis")
+VIRTUOSO_ALIASES = ("virtuoso", "openlink virtuoso")
 
 DBMS_DIRECTORY_DICT = dict((getattr(DBMS, _), getattr(DBMS_DIRECTORY_NAME, _)) for _ in dir(DBMS) if not _.startswith("_"))
 
-SUPPORTED_DBMS = MSSQL_ALIASES + MYSQL_ALIASES + PGSQL_ALIASES + ORACLE_ALIASES + SQLITE_ALIASES + ACCESS_ALIASES + FIREBIRD_ALIASES + MAXDB_ALIASES + SYBASE_ALIASES + DB2_ALIASES + HSQLDB_ALIASES + H2_ALIASES + INFORMIX_ALIASES
+SUPPORTED_DBMS = set(MSSQL_ALIASES + MYSQL_ALIASES + PGSQL_ALIASES + ORACLE_ALIASES + SQLITE_ALIASES + ACCESS_ALIASES + FIREBIRD_ALIASES + MAXDB_ALIASES + SYBASE_ALIASES + DB2_ALIASES + HSQLDB_ALIASES + H2_ALIASES + INFORMIX_ALIASES + MONETDB_ALIASES + DERBY_ALIASES + VERTICA_ALIASES + MCKOI_ALIASES + PRESTO_ALIASES + ALTIBASE_ALIASES + MIMERSQL_ALIASES + CLICKHOUSE_ALIASES + CRATEDB_ALIASES + CUBRID_ALIASES + CACHE_ALIASES + EXTREMEDB_ALIASES + RAIMA_ALIASES + VIRTUOSO_ALIASES)
 SUPPORTED_OS = ("linux", "windows")
 
-DBMS_ALIASES = ((DBMS.MSSQL, MSSQL_ALIASES), (DBMS.MYSQL, MYSQL_ALIASES), (DBMS.PGSQL, PGSQL_ALIASES), (DBMS.ORACLE, ORACLE_ALIASES), (DBMS.SQLITE, SQLITE_ALIASES), (DBMS.ACCESS, ACCESS_ALIASES), (DBMS.FIREBIRD, FIREBIRD_ALIASES), (DBMS.MAXDB, MAXDB_ALIASES), (DBMS.SYBASE, SYBASE_ALIASES), (DBMS.DB2, DB2_ALIASES), (DBMS.HSQLDB, HSQLDB_ALIASES), (DBMS.H2, H2_ALIASES), (DBMS.INFORMIX, INFORMIX_ALIASES))
+DBMS_ALIASES = ((DBMS.MSSQL, MSSQL_ALIASES), (DBMS.MYSQL, MYSQL_ALIASES), (DBMS.PGSQL, PGSQL_ALIASES), (DBMS.ORACLE, ORACLE_ALIASES), (DBMS.SQLITE, SQLITE_ALIASES), (DBMS.ACCESS, ACCESS_ALIASES), (DBMS.FIREBIRD, FIREBIRD_ALIASES), (DBMS.MAXDB, MAXDB_ALIASES), (DBMS.SYBASE, SYBASE_ALIASES), (DBMS.DB2, DB2_ALIASES), (DBMS.HSQLDB, HSQLDB_ALIASES), (DBMS.H2, H2_ALIASES), (DBMS.INFORMIX, INFORMIX_ALIASES), (DBMS.MONETDB, MONETDB_ALIASES), (DBMS.DERBY, DERBY_ALIASES), (DBMS.VERTICA, VERTICA_ALIASES), (DBMS.MCKOI, MCKOI_ALIASES), (DBMS.PRESTO, PRESTO_ALIASES), (DBMS.ALTIBASE, ALTIBASE_ALIASES), (DBMS.MIMERSQL, MIMERSQL_ALIASES), (DBMS.CLICKHOUSE, CLICKHOUSE_ALIASES), (DBMS.CRATEDB, CRATEDB_ALIASES), (DBMS.CUBRID, CUBRID_ALIASES), (DBMS.CACHE, CACHE_ALIASES), (DBMS.EXTREMEDB, EXTREMEDB_ALIASES), (DBMS.FRONTBASE, FRONTBASE_ALIASES), (DBMS.RAIMA, RAIMA_ALIASES), (DBMS.VIRTUOSO, VIRTUOSO_ALIASES))
 
 USER_AGENT_ALIASES = ("ua", "useragent", "user-agent")
 REFERER_ALIASES = ("ref", "referer", "referrer")
 HOST_ALIASES = ("host",)
 
+# DBMSes with upper case identifiers
+UPPER_CASE_DBMSES = set((DBMS.ORACLE, DBMS.DB2, DBMS.FIREBIRD, DBMS.MAXDB, DBMS.H2, DBMS.DERBY, DBMS.ALTIBASE))
+
+# Default schemas to use (when unable to enumerate)
 H2_DEFAULT_SCHEMA = HSQLDB_DEFAULT_SCHEMA = "PUBLIC"
+VERTICA_DEFAULT_SCHEMA = "public"
+MCKOI_DEFAULT_SCHEMA = "APP"
+CACHE_DEFAULT_SCHEMA = "SQLUser"
+
+# DBMSes where OFFSET mechanism starts from 1
+PLUS_ONE_DBMSES = set((DBMS.ORACLE, DBMS.DB2, DBMS.ALTIBASE, DBMS.MSSQL, DBMS.CACHE))
 
 # Names that can't be used to name files on Windows OS
 WINDOWS_RESERVED_NAMES = ("CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9")
@@ -302,6 +365,7 @@ BASIC_HELP_ITEMS = (
     "getCurrentUser",
     "getCurrentDb",
     "getPasswordHashes",
+    "getDbs",
     "getTables",
     "getColumns",
     "getSchema",
@@ -345,14 +409,15 @@ FILE_PATH_REGEXES = (r"<b>(?P<result>[^<>]+?)</b> on line \d+", r"\bin (?P<resul
 # Regular expressions used for parsing error messages (--parse-errors)
 ERROR_PARSING_REGEXES = (
     r"\[Microsoft\]\[ODBC SQL Server Driver\]\[SQL Server\](?P<result>[^<]+)",
-    r"<b>[^<]*(fatal|error|warning|exception)[^<]*</b>:?\s*(?P<result>[^<]+)",
-    r"(?m)^\s*(fatal|error|warning|exception):?\s*(?P<result>[^\n]+?)$",
+    r"<b>[^<]{0,100}(fatal|error|warning|exception)[^<]*</b>:?\s*(?P<result>[^<]+)",
+    r"(?m)^\s{0,100}(fatal|error|warning|exception):?\s*(?P<result>[^\n]+?)$",
     r"(sql|dbc)[^>'\"]{0,32}(fatal|error|warning|exception)(</b>)?:\s*(?P<result>[^<>]+)",
-    r"(?P<result>[^\n>]*SQL Syntax[^\n<]+)",
+    r"(?P<result>[^\n>]{0,100}SQL Syntax[^\n<]+)",
     r"(?s)<li>Error Type:<br>(?P<result>.+?)</li>",
     r"CDbCommand (?P<result>[^<>\n]*SQL[^<>\n]+)",
+    r"Code: \d+. DB::Exception: (?P<result>[^<>\n]*)",
     r"error '[0-9a-f]{8}'((<[^>]+>)|\s)+(?P<result>[^<>]+)",
-    r"\[[^\n\]]+(ODBC|JDBC)[^\n\]]+\](\[[^\]]+\])?(?P<result>[^\n]+(in query expression|\(SQL| at /[^ ]+pdo)[^\n<]+)",
+    r"\[[^\n\]]{1,100}(ODBC|JDBC)[^\n\]]+\](\[[^\]]+\])?(?P<result>[^\n]+(in query expression|\(SQL| at /[^ ]+pdo)[^\n<]+)",
     r"(?P<result>query error: SELECT[^<>]+)"
 )
 
@@ -360,7 +425,7 @@ ERROR_PARSING_REGEXES = (
 META_CHARSET_REGEX = r'(?si)<head>.*<meta[^>]+charset="?(?P<result>[^"> ]+).*</head>'
 
 # Regular expression used for parsing refresh info from meta html headers
-META_REFRESH_REGEX = r'(?si)<head>(?!.*?<noscript.*?</head).*?<meta http-equiv="?refresh"?[^>]+content="?[^">]+url=["\']?(?P<result>[^\'">]+).*</head>'
+META_REFRESH_REGEX = r'(?i)<meta http-equiv="?refresh"?[^>]+content="?[^">]+;\s*(url=)?["\']?(?P<result>[^\'">]+)'
 
 # Regular expression used for parsing Javascript redirect request
 JAVASCRIPT_HREF_REGEX = r'<script>\s*(\w+\.)?location\.href\s*=["\'](?P<result>[^"\']+)'
@@ -381,7 +446,7 @@ WEBSCARAB_SPLITTER = "### Conversation"
 BURP_REQUEST_REGEX = r"={10,}\s+([A-Z]{3,} .+?)\s+={10,}"
 
 # Regex used for parsing XML Burp saved history items
-BURP_XML_HISTORY_REGEX = r'<port>(\d+)</port>.+?<request base64="true"><!\[CDATA\[([^]]+)'
+BURP_XML_HISTORY_REGEX = r'<port>(\d+)</port>.*?<request base64="true"><!\[CDATA\[([^]]+)'
 
 # Encoding used for Unicode data
 UNICODE_ENCODING = "utf8"
@@ -438,7 +503,7 @@ REFLECTED_VALUE_MARKER = "__REFLECTED_VALUE__"
 REFLECTED_BORDER_REGEX = r"[^A-Za-z]+"
 
 # Regular expression used for replacing non-alphanum characters
-REFLECTED_REPLACEMENT_REGEX = r"[^\n]{1,100}"
+REFLECTED_REPLACEMENT_REGEX = r"[^\n]{1,168}"
 
 # Maximum time (in seconds) spent per reflective value(s) replacement
 REFLECTED_REPLACEMENT_TIMEOUT = 3
@@ -448,6 +513,9 @@ REFLECTED_MAX_REGEX_PARTS = 10
 
 # Chars which can be used as a failsafe values in case of too long URL encoding value
 URLENCODE_FAILSAFE_CHARS = "()|,"
+
+# Factor used for yuge page multiplication
+YUGE_FACTOR = 1000
 
 # Maximum length of URL encoded value after which failsafe procedure takes away
 URLENCODE_CHAR_LIMIT = 2000
@@ -481,6 +549,9 @@ GOOGLE_ANALYTICS_COOKIE_PREFIX = "__UTM"
 
 # Prefix for configuration overriding environment variables
 SQLMAP_ENVIRONMENT_PREFIX = "SQLMAP_"
+
+# General OS environment variables that can be used for setting proxy address
+PROXY_ENVIRONMENT_VARIABLES = ("all_proxy", "ALL_PROXY", "http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY")
 
 # Turn off resume console info to avoid potential slowdowns
 TURN_OFF_RESUME_INFO_LIMIT = 20
@@ -525,10 +596,13 @@ LEGAL_DISCLAIMER = "Usage of sqlmap for attacking targets without prior mutual c
 REFLECTIVE_MISS_THRESHOLD = 20
 
 # Regular expression used for extracting HTML title
-HTML_TITLE_REGEX = r"<title>(?P<result>[^<]+)</title>"
+HTML_TITLE_REGEX = r"(?i)<title>(?P<result>[^<]+)</title>"
 
 # Table used for Base64 conversion in WordPress hash cracking routine
 ITOA64 = "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+# Options/switches to be ignored in command-line parsing (e.g. those passed from Firefox)
+IGNORED_OPTIONS = ("--compressed",)
 
 # Chars used to quickly distinguish if the user provided tainted parameter values
 DUMMY_SQL_INJECTION_CHARS = ";()'"
@@ -552,16 +626,16 @@ BRUTE_COLUMN_EXISTS_TEMPLATE = "EXISTS(SELECT %s FROM %s)"
 SHELLCODEEXEC_RANDOM_STRING_MARKER = b"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 
 # Period after last-update to start nagging about the old revision
-LAST_UPDATE_NAGGING_DAYS = 60
+LAST_UPDATE_NAGGING_DAYS = 180
 
 # Minimum non-writing chars (e.g. ['"-:/]) ratio in case of parsed error messages
 MIN_ERROR_PARSING_NON_WRITING_RATIO = 0.05
 
-# Generic address for checking the Internet connection while using switch --check-internet
-CHECK_INTERNET_ADDRESS = "https://ipinfo.io/"
+# Generic address for checking the Internet connection while using switch --check-internet (Note: https version does not work for Python < 2.7.9)
+CHECK_INTERNET_ADDRESS = "http://ipinfo.io/json"
 
 # Value to look for in response to CHECK_INTERNET_ADDRESS
-CHECK_INTERNET_VALUE = "IP Address Details"
+CHECK_INTERNET_VALUE = '"ip":'
 
 # Payload used for checking of existence of WAF/IPS (dummier the better)
 IPS_WAF_CHECK_PAYLOAD = "AND 1=1 UNION ALL SELECT 1,NULL,'<script>alert(\"XSS\")</script>',table_name FROM information_schema.tables WHERE 2>1--/**/; EXEC xp_cmdshell('cat ../../../etc/passwd')#"
@@ -591,7 +665,7 @@ SOCKET_PRE_CONNECT_QUEUE_SIZE = 3
 TRIM_STDOUT_DUMP_SIZE = 256
 
 # Reference: http://stackoverflow.com/a/3168436
-# Reference: https://support.microsoft.com/en-us/kb/899149
+# Reference: https://web.archive.org/web/20150407141500/https://support.microsoft.com/en-us/kb/899149
 DUMP_FILE_BUFFER_SIZE = 1024
 
 # Parse response headers only first couple of times
@@ -599,6 +673,9 @@ PARSE_HEADERS_LIMIT = 3
 
 # Step used in ORDER BY technique used for finding the right number of columns in UNION query injections
 ORDER_BY_STEP = 10
+
+# Maximum value used in ORDER BY technique used for finding the right number of columns in UNION query injections
+ORDER_BY_MAX = 1000
 
 # Maximum number of times for revalidation of a character in inference (as required)
 MAX_REVALIDATION_STEPS = 5
@@ -625,7 +702,7 @@ DEFAULT_COOKIE_DELIMITER = ';'
 FORCE_COOKIE_EXPIRATION_TIME = "9999999999"
 
 # Github OAuth token used for creating an automatic Issue for unhandled exceptions
-GITHUB_REPORT_OAUTH_TOKEN = "NTYzYjhmZWJjYzc0Njg2ODJhNzhmNDg1YzM0YzlkYjk3N2JiMzE3Nw=="
+GITHUB_REPORT_OAUTH_TOKEN = "Z2hwXzJEdUdKQXVyNms3c2J2em0weXNFYlVrZ2hxczE1eDBRQnA2Vg"
 
 # Skip unforced HashDB flush requests below the threshold number of cached items
 HASHDB_FLUSH_THRESHOLD = 32
@@ -652,7 +729,7 @@ LARGE_OUTPUT_THRESHOLD = 1024 ** 2
 SLOW_ORDER_COUNT_THRESHOLD = 10000
 
 # Give up on hash recognition if nothing was found in first given number of rows
-HASH_RECOGNITION_QUIT_THRESHOLD = 10000
+HASH_RECOGNITION_QUIT_THRESHOLD = 1000
 
 # Regular expression used for automatic hex conversion and hash cracking of (RAW) binary column values
 HASH_BINARY_COLUMNS_REGEX = r"(?i)pass|psw|hash"
@@ -696,6 +773,9 @@ MAX_CONNECTION_TOTAL_SIZE = 100 * 1024 * 1024
 # For preventing MemoryError exceptions (caused when using large sequences in difflib.SequenceMatcher)
 MAX_DIFFLIB_SEQUENCE_LENGTH = 10 * 1024 * 1024
 
+# Page size threshold used in heuristic checks (e.g. getHeuristicCharEncoding(), identYwaf, htmlParser, etc.)
+HEURISTIC_PAGE_SIZE_THRESHOLD = 64 * 1024
+
 # Maximum (multi-threaded) length of entry in bisection algorithm
 MAX_BISECTION_LENGTH = 50 * 1024 * 1024
 
@@ -712,10 +792,10 @@ VALID_TIME_CHARS_RUN_THRESHOLD = 100
 CHECK_ZERO_COLUMNS_THRESHOLD = 10
 
 # Boldify all logger messages containing these "patterns"
-BOLD_PATTERNS = ("' injectable", "provided empty", "leftover chars", "might be injectable", "' is vulnerable", "is not injectable", "does not seem to be", "test failed", "test passed", "live test final result", "test shows that", "the back-end DBMS is", "created Github", "blocked by the target server", "protection is involved", "CAPTCHA", "specific response", "NULL connection is supported", "PASSED", "FAILED", "for more than")
+BOLD_PATTERNS = ("' injectable", "provided empty", "leftover chars", "might be injectable", "' is vulnerable", "is not injectable", "does not seem to be", "test failed", "test passed", "live test final result", "test shows that", "the back-end DBMS is", "created Github", "blocked by the target server", "protection is involved", "CAPTCHA", "specific response", "NULL connection is supported", "PASSED", "FAILED", "for more than", "connection to ")
 
 # TLDs used in randomization of email-alike parameter values
-RANDOMIZATION_TLDS = ("com", "net", "ru", "org", "de", "jp", "cn", "fr", "it", "pl", "tv", "edu", "in", "ir", "es", "me", "info", "gr", "gov", "ca", "co", "se", "cz", "to", "vn", "nl", "cc", "az", "hu", "ua", "be", "no", "biz", "io", "ch", "ro", "sk", "eu", "us", "tw", "pt", "fi", "at", "lt", "kz", "cl", "hr", "pk", "lv", "la", "pe")
+RANDOMIZATION_TLDS = ("com", "net", "ru", "org", "de", "uk", "br", "jp", "cn", "fr", "it", "pl", "tv", "edu", "in", "ir", "es", "me", "info", "gr", "gov", "ca", "co", "se", "cz", "to", "vn", "nl", "cc", "az", "hu", "ua", "be", "no", "biz", "io", "ch", "ro", "sk", "eu", "us", "tw", "pt", "fi", "at", "lt", "kz", "cl", "hr", "pk", "lv", "la", "pe", "au")
 
 # Generic www root directory names
 GENERIC_DOC_ROOT_DIRECTORY_NAMES = ("htdocs", "httpdocs", "public", "wwwroot", "www")
@@ -747,6 +827,9 @@ RESTAPI_DEFAULT_ADDRESS = "127.0.0.1"
 # Default REST-JSON API server listen port
 RESTAPI_DEFAULT_PORT = 8775
 
+# Unsupported options by REST-JSON API server
+RESTAPI_UNSUPPORTED_OPTIONS = ("sqlShell", "wizard")
+
 # Use "Supplementary Private Use Area-A"
 INVALID_UNICODE_PRIVATE_AREA = False
 
@@ -757,16 +840,16 @@ INVALID_UNICODE_CHAR_FORMAT = r"\x%02x"
 XML_RECOGNITION_REGEX = r"(?s)\A\s*<[^>]+>(.+>)?\s*\Z"
 
 # Regular expression used for detecting JSON POST data
-JSON_RECOGNITION_REGEX = r'(?s)\A(\s*\[)*\s*\{.*"[^"]+"\s*:\s*("[^"]*"|\d+|true|false|null).*\}\s*(\]\s*)*\Z'
+JSON_RECOGNITION_REGEX = r'(?s)\A(\s*\[)*\s*\{.*"[^"]+"\s*:\s*("[^"]*"|\d+|true|false|null|\[).*\}\s*(\]\s*)*\Z'
 
 # Regular expression used for detecting JSON-like POST data
-JSON_LIKE_RECOGNITION_REGEX = r"(?s)\A(\s*\[)*\s*\{.*'[^']+'\s*:\s*('[^']+'|\d+).*\}\s*(\]\s*)*\Z"
+JSON_LIKE_RECOGNITION_REGEX = r"(?s)\A(\s*\[)*\s*\{.*('[^']+'|\"[^\"]+\"|\w+)\s*:\s*('[^']+'|\"[^\"]+\"|\d+).*\}\s*(\]\s*)*\Z"
 
 # Regular expression used for detecting multipart POST data
 MULTIPART_RECOGNITION_REGEX = r"(?i)Content-Disposition:[^;]+;\s*name="
 
 # Regular expression used for detecting Array-like POST data
-ARRAY_LIKE_RECOGNITION_REGEX = r"(\A|%s)(\w+)\[\]=.+%s\2\[\]=" % (DEFAULT_GET_POST_DELIMITER, DEFAULT_GET_POST_DELIMITER)
+ARRAY_LIKE_RECOGNITION_REGEX = r"(\A|%s)(\w+)\[\d*\]=.+%s\2\[\d*\]=" % (DEFAULT_GET_POST_DELIMITER, DEFAULT_GET_POST_DELIMITER)
 
 # Default POST data content-type
 DEFAULT_CONTENT_TYPE = "application/x-www-form-urlencoded; charset=utf-8"
@@ -813,7 +896,7 @@ CSRF_TOKEN_PARAMETER_INFIXES = ("csrf", "xsrf", "token")
 # Prefixes used in brute force search for web server document root
 BRUTE_DOC_ROOT_PREFIXES = {
     OS.LINUX: ("/var/www", "/usr/local/apache", "/usr/local/apache2", "/usr/local/www/apache22", "/usr/local/www/apache24", "/usr/local/httpd", "/var/www/nginx-default", "/srv/www", "/var/www/%TARGET%", "/var/www/vhosts/%TARGET%", "/var/www/virtual/%TARGET%", "/var/www/clients/vhosts/%TARGET%", "/var/www/clients/virtual/%TARGET%"),
-    OS.WINDOWS: ("/xampp", "/Program Files/xampp", "/wamp", "/Program Files/wampp", "/apache", "/Program Files/Apache Group/Apache", "/Program Files/Apache Group/Apache2", "/Program Files/Apache Group/Apache2.2", "/Program Files/Apache Group/Apache2.4", "/Inetpub/wwwroot", "/Inetpub/wwwroot/%TARGET%", "/Inetpub/vhosts/%TARGET%")
+    OS.WINDOWS: ("/xampp", "/Program Files/xampp", "/wamp", "/Program Files/wampp", "/Apache/Apache", "/apache", "/Program Files/Apache Group/Apache", "/Program Files/Apache Group/Apache2", "/Program Files/Apache Group/Apache2.2", "/Program Files/Apache Group/Apache2.4", "/Inetpub/wwwroot", "/Inetpub/wwwroot/%TARGET%", "/Inetpub/vhosts/%TARGET%")
 }
 
 # Suffixes used in brute force search for web server document root
@@ -827,6 +910,9 @@ KB_CHARS_BOUNDARY_CHAR = 'q'
 
 # Letters of lower frequency used in kb.chars
 KB_CHARS_LOW_FREQUENCY_ALPHABET = "zqxjkvbp"
+
+# Printable bytes
+PRINTABLE_BYTES = set(bytes(string.printable, "ascii") if six.PY3 else string.printable)
 
 # SQL keywords used for splitting in HTTP chunked transfer encoded requests (switch --chunk)
 HTTP_CHUNKED_SPLIT_KEYWORDS = ("SELECT", "UPDATE", "INSERT", "FROM", "LOAD_FILE", "UNION", "information_schema", "sysdatabases", "msysaccessobjects", "msysqueries", "sysmodules")
@@ -861,14 +947,24 @@ for key, value in os.environ.items():
     if key.upper().startswith("%s_" % SQLMAP_ENVIRONMENT_PREFIX):
         _ = key[len(SQLMAP_ENVIRONMENT_PREFIX) + 1:].upper()
         if _ in globals():
-            globals()[_] = value
+            original = globals()[_]
+            if isinstance(original, int):
+                try:
+                    globals()[_] = int(value)
+                except ValueError:
+                    pass
+            elif isinstance(original, bool):
+                globals()[_] = value.lower() in ('1', 'true')
+            elif isinstance(original, (list, tuple)):
+                globals()[_] = [__.strip() for __ in _.split(',')]
+            else:
+                globals()[_] = value
 
 # Installing "reversible" unicode (decoding) error handler
 def _reversible(ex):
-    if isinstance(ex, UnicodeDecodeError):
-        if INVALID_UNICODE_PRIVATE_AREA:
-            return (u"".join(_unichr(int('000f00%2x' % (_ if isinstance(_, int) else ord(_)), 16)) for _ in ex.object[ex.start:ex.end]), ex.end)
-        else:
-            return (u"".join(INVALID_UNICODE_CHAR_FORMAT % (_ if isinstance(_, int) else ord(_)) for _ in ex.object[ex.start:ex.end]), ex.end)
+    if INVALID_UNICODE_PRIVATE_AREA:
+        return (u"".join(_unichr(int('000f00%2x' % (_ if isinstance(_, int) else ord(_)), 16)) for _ in ex.object[ex.start:ex.end]), ex.end)
+    else:
+        return (u"".join(INVALID_UNICODE_CHAR_FORMAT % (_ if isinstance(_, int) else ord(_)) for _ in ex.object[ex.start:ex.end]), ex.end)
 
 codecs.register_error("reversible", _reversible)

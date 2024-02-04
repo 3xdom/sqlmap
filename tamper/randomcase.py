@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -51,7 +51,7 @@ def tamper(payload, **kwargs):
         for match in re.finditer(r"\b[A-Za-z_]{2,}\b", retVal):
             word = match.group()
 
-            if (word.upper() in kb.keywords and re.search(r"(?i)[`\"\[]%s[`\"\]]" % word, retVal) is None) or ("%s(" % word) in payload:
+            if (word.upper() in kb.keywords and re.search(r"(?i)[`\"'\[]%s[`\"'\]]" % word, retVal) is None) or ("%s(" % word) in payload:
                 while True:
                     _ = ""
 

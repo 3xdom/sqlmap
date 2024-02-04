@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -12,6 +12,7 @@ import functools
 import math
 import os
 import random
+import re
 import sys
 import time
 import uuid
@@ -167,7 +168,26 @@ class WichmannHill(random.Random):
 
 def patchHeaders(headers):
     if headers is not None and not hasattr(headers, "headers"):
+        if isinstance(headers, dict):
+            class _(dict):
+                def __getitem__(self, key):
+                    for key_ in self:
+                        if key_.lower() == key.lower():
+                            return super(_, self).__getitem__(key_)
+
+                    raise KeyError(key)
+
+                def get(self, key, default=None):
+                    try:
+                        return self[key]
+                    except KeyError:
+                        return default
+
+            headers = _(headers)
+
         headers.headers = ["%s: %s\r\n" % (header, headers[header]) for header in headers]
+
+    return headers
 
 def cmp(a, b):
     """
@@ -186,7 +206,19 @@ def cmp(a, b):
 
 # Reference: https://github.com/urllib3/urllib3/blob/master/src/urllib3/filepost.py
 def choose_boundary():
-    return uuid.uuid4().hex
+    """
+    >>> len(choose_boundary()) == 32
+    True
+    """
+
+    retval = ""
+
+    try:
+        retval = uuid.uuid4().hex
+    except AttributeError:
+        retval = "".join(random.sample("0123456789abcdef", 1)[0] for _ in xrange(32))
+
+    return retval
 
 # Reference: http://python3porting.com/differences.html
 def round(x, d=0):
@@ -245,3 +277,38 @@ if sys.version_info >= (3, 0):
 else:
     xrange = xrange
     buffer = buffer
+
+def LooseVersion(version):
+    """
+    >>> LooseVersion("1.0") == LooseVersion("1.0")
+    True
+    >>> LooseVersion("1.0.1") > LooseVersion("1.0")
+    True
+    >>> LooseVersion("1.0.1-") == LooseVersion("1.0.1")
+    True
+    >>> LooseVersion("1.0.11") < LooseVersion("1.0.111")
+    True
+    >>> LooseVersion("foobar") > LooseVersion("1.0")
+    False
+    >>> LooseVersion("1.0") > LooseVersion("foobar")
+    False
+    >>> LooseVersion("3.22-mysql") == LooseVersion("3.22-mysql-ubuntu0.3")
+    True
+    >>> LooseVersion("8.0.22-0ubuntu0.20.04.2")
+    8.000022
+    """
+
+    match = re.search(r"\A(\d[\d.]*)", version or "")
+
+    if match:
+        result = 0
+        value = match.group(1)
+        weight = 1.0
+        for part in value.strip('.').split('.'):
+            if part.isdigit():
+                result += int(part) * weight
+            weight *= 1e-3
+    else:
+        result = float("NaN")
+
+    return result

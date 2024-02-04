@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -20,7 +20,7 @@ class FingerprintHandler(ContentHandler):
     def __init__(self, banner, info):
         ContentHandler.__init__(self)
 
-        self._banner = sanitizeStr(banner)
+        self._banner = sanitizeStr(banner or "")
         self._regexp = None
         self._match = None
         self._dbmsVersion = None
@@ -30,7 +30,7 @@ class FingerprintHandler(ContentHandler):
     def _feedInfo(self, key, value):
         value = sanitizeStr(value)
 
-        if value in (None, "None"):
+        if value in (None, "None", ""):
             return
 
         if key == "dbmsVersion":
@@ -47,7 +47,7 @@ class FingerprintHandler(ContentHandler):
             self._regexp = sanitizeStr(attrs.get("value"))
             _ = re.match(r"\A[A-Za-z0-9]+", self._regexp)  # minor trick avoiding compiling of large amount of regexes
 
-            if _ and _.group(0).lower() in self._banner.lower() or not _:
+            if _ and self._banner and _.group(0).lower() in self._banner.lower() or not _:
                 self._match = re.search(self._regexp, self._banner, re.I | re.M)
             else:
                 self._match = None
@@ -62,10 +62,10 @@ class FingerprintHandler(ContentHandler):
             self._techVersion = sanitizeStr(attrs.get("tech_version"))
             self._sp = sanitizeStr(attrs.get("sp"))
 
-            if self._dbmsVersion.isdigit():
+            if self._dbmsVersion and self._dbmsVersion.isdigit():
                 self._feedInfo("dbmsVersion", self._match.group(int(self._dbmsVersion)))
 
-            if self._techVersion.isdigit():
+            if self._techVersion and self._techVersion.isdigit():
                 self._feedInfo("technology", "%s %s" % (attrs.get("technology"), self._match.group(int(self._techVersion))))
             else:
                 self._feedInfo("technology", attrs.get("technology"))

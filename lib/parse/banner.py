@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+Copyright (c) 2006-2023 sqlmap developers (https://sqlmap.org/)
 See the file 'LICENSE' for copying permission
 """
 
@@ -26,7 +26,7 @@ class MSSQLBannerHandler(ContentHandler):
     def __init__(self, banner, info):
         ContentHandler.__init__(self)
 
-        self._banner = sanitizeStr(banner)
+        self._banner = sanitizeStr(banner or "")
         self._inVersion = False
         self._inServicePack = False
         self._release = None
@@ -62,7 +62,7 @@ class MSSQLBannerHandler(ContentHandler):
     def endElement(self, name):
         if name == "signature":
             for version in (self._version, self._versionAlt):
-                if version and re.search(r" %s[\.\ ]+" % re.escape(version), self._banner):
+                if version and self._banner and re.search(r" %s[\.\ ]+" % re.escape(version), self._banner):
                     self._feedInfo("dbmsRelease", self._release)
                     self._feedInfo("dbmsVersion", self._version)
                     self._feedInfo("dbmsServicePack", self._servicePack)
